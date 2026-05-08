@@ -39,7 +39,11 @@ Instead this repo will ship a **standalone Notification Center widget** that pul
 
 ### Implementation
 
-Not started. Will be designed and built in a follow-up session in a separate working directory; this repo currently only owns the spec above plus the `bolt_battery.py` data source.
+Designed, not coded yet. The widget and its menu-bar host app will live in this repo (single-repo layout, see `docs/open-decisions.md` D9). Implementation is broken into 10 independent steps — see:
+
+- [`docs/architecture.md`](docs/architecture.md) — three-tier architecture (HID++ producer → App Group snapshot → widget extension), refresh strategy, macOS-specific App Group quirks
+- [`docs/development-plan.md`](docs/development-plan.md) — Step 0–10 with scope, acceptance criteria, and explicit non-goals per step
+- [`docs/open-decisions.md`](docs/open-decisions.md) — pending decisions (data pathway, language, sampling frequency, bundle ID, etc.)
 
 ## Requirements
 
