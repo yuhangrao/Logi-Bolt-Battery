@@ -23,7 +23,11 @@ Sample output on this machine:
   Firmware:       MainApp    RBK v81.01.B0015
 ```
 
-Run: `python3 bolt_battery.py` — add `--debug` for raw HID++ frame trace.
+Run: `python3 bolt_battery.py` for human-readable output. Flags:
+
+- `--json` — emit a `{"devices":[...]}` payload with `socPercent` / `chargingState` / `externalPower` / `deviceName` / `deviceType` (matching the future `BatterySnapshot` schema, so the Swift port can diff against this output)
+- `--device-type keyboard` — only the first keyboard, and JSON mode unwraps to a single object (e.g. `python3 bolt_battery.py --json --device-type keyboard | jq '.socPercent'`)
+- `--debug` — print raw HID++ frames to stderr (safe to combine with `--json`)
 
 ## Planned: independent macOS widget
 
