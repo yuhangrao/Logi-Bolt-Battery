@@ -36,20 +36,10 @@ Instead this repo will ship a **standalone Notification Center widget** that pul
 - **Form factor:** macOS small widget (single rectangle), visual style matching Apple's built-in Batteries widget — rounded dark background, circular progress ring, device glyph in the center, identical color ramp (green / yellow / red)
 - **Primary readout:** current battery percentage + charging state, matching Apple's widget behavior (ring fills clockwise, ring color reflects level, glyph shows charging bolt when applicable)
 - **Footer line:** small English text — `Last charged <duration> ago to <percent>%` (e.g. `Last charged 3h ago to 100%`)
-- **Refresh cadence:** every ~5 min from a background helper, more aggressive when charging state changes
 
-### Architecture (to be designed)
+### Implementation
 
-Tentative:
-
-| Layer | Responsibility |
-|---|---|
-| Background helper (Swift port of `bolt_battery.py`, or Python launchd job) | Open HID++ vendor interface, poll every N minutes, append samples to local store |
-| Local store (App Group container or JSON in `~/Library/Application Support/`) | Latest reading + a rolling window for charge-cycle detection |
-| Charge-cycle analyzer | Detect transitions `discharging → charging → discharging` and persist `(end_time, end_soc)` for the footer text |
-| WidgetKit extension (SwiftUI) | Read store, render small widget, refresh on `TimelineProvider` schedule |
-
-The polling/charging-cycle logic and the rendering are decoupled so the helper can be swapped (Python ↔ Swift) without touching the UI.
+Not started. Will be designed and built in a follow-up session in a separate working directory; this repo currently only owns the spec above plus the `bolt_battery.py` data source.
 
 ## Requirements
 
