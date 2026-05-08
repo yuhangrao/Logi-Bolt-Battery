@@ -35,6 +35,12 @@ Run: `python3 bolt_battery.py` for human-readable output. Flags:
 - `public actor BoltClient` exposes `getProtocolVersion` / `getFeatureIndex` / `getDeviceName` / `getDeviceType` / `getBattery` (UnifiedBattery `0x1004` with fallback to legacy `0x1000`) / `getFirmware` / `discoverKeyboard` / `ping`. Errors are typed `BoltError` (IOKit return codes + HID++ 1.0 / 2.0 protocol errors with raw codes).
 - `bolt-battery-swift` produces the same human and JSON output as `bolt_battery.py`. Verified byte-identical: `swift run bolt-battery-swift --json | jq -S 'del(.devices[].sampledAt)'` == `python3 bolt_battery.py --json | jq -S 'del(.devices[].sampledAt)'` on the live MX Keys S.
 
+`BoltBattery` menu bar host app — Step 4 of the plan.
+
+- Lives under `app/`. Project is declared in `app/project.yml` (XcodeGen) and signed with the Personal Team locked in `docs/open-decisions.md` D8.
+- Build: `brew install xcodegen` once, then `cd app && xcodegen generate && xcodebuild -scheme BoltBattery -configuration Debug build`. Open the resulting `BoltBattery.app` to see `⌨ N%` in the menu bar — the app polls the Bolt receiver every 5 minutes via `BoltHIDPP` and updates the title plus a small drop-down (`MX Keys S — N% (state)`, `Last sampled X ago`, `Quit`).
+- This step explicitly does **not** touch App Group / WidgetKit / login items / preferences — see `docs/development-plan.md` Step 4 for scope.
+
 ## Planned: independent macOS widget
 
 Apple's built-in Batteries widget is fed by the private `com.apple.BatteryCenter` framework, which only sees devices that publish a `BatteryPercent` property in IORegistry. The Bolt receiver presents itself to macOS as a generic USB HID composite device, hiding the real keyboard/mouse battery behind Logitech's HID++ protocol — so it can't be merged into Apple's widget without virtualizing a BLE peripheral (impossible on macOS userspace) or shipping a DriverKit DEXT (entitlement-gated, brittle).
@@ -61,4 +67,4 @@ Designed, not coded yet. The widget and its menu-bar host app will live in this 
 - A Logi Bolt receiver (`VID 0x046D`, `PID 0xC548`) plugged in
 - Python 3 with stdlib (no pip installs needed for `bolt_battery.py`)
 - For the Swift package (Step 2+): Xcode Command Line Tools (`xcode-select --install`); Swift 5.9+ toolchain. Tested on Swift 6.3.1 / Xcode 26
-- For the upcoming widget (Step 4+): full Xcode 14+ install, plus an Apple ID added to Xcode → Settings → Accounts (Personal Team is sufficient — see `docs/open-decisions.md` D8)
+- For the menu bar app and the upcoming widget (Step 4+): full Xcode 14+ install, plus an Apple ID added to Xcode → Settings → Accounts (Personal Team is sufficient — see `docs/open-decisions.md` D8). Also `brew install xcodegen` for regenerating `app/BoltBattery.xcodeproj` from `app/project.yml`.
