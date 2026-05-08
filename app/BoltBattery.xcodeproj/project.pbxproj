@@ -7,33 +7,105 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		023BC608CC15F216AF10F8CA /* BatterySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F53ACE4977571FAA8F832E50 /* BatterySnapshot.swift */; };
+		0850C54DE462D61EBC15FAEE /* BoltBatteryWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DC5FE1DD4EFB8C3A72FAE241 /* BoltBatteryWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1EB72E2252A10A261CA8B45F /* BoltHIDPP in Frameworks */ = {isa = PBXBuildFile; productRef = 55B2158D82ADB3F70CB3C7BC /* BoltHIDPP */; };
+		2710E21624FDD075BE5E946C /* SnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C0A6DADD867BEE55FDBFC66 /* SnapshotStore.swift */; };
+		38042C336E61710D09B6474C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C91C7574795AC4D5E5BB718 /* WidgetKit.framework */; };
+		4CBF5D8ACE5505C56ED0D013 /* BatterySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F53ACE4977571FAA8F832E50 /* BatterySnapshot.swift */; };
+		5CEA2034692A57FE9F66E69B /* SnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C0A6DADD867BEE55FDBFC66 /* SnapshotStore.swift */; };
 		674433BCDE4B2CE4712120EC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04D525313CFC3179EF298DF /* AppDelegate.swift */; };
+		8991AA9EDFB7D083B156D567 /* BoltBatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833573A503A1749F102FA792 /* BoltBatteryWidget.swift */; };
+		8DA0AA5B311E790B86439E79 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8ABB511BCD6F95A6EF842BDF /* SwiftUI.framework */; };
+		BB39C2D7FCED0A2D18323E8E /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C91C7574795AC4D5E5BB718 /* WidgetKit.framework */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		32B78C9132B294D7CA683F11 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1FF702ED9C83537E7980E5AD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B5BF8C542F8596085E7C4EBC;
+			remoteInfo = BoltBatteryWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F3B4B629B9735E239763E522 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0850C54DE462D61EBC15FAEE /* BoltBatteryWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0D6CF948E4DDFC21B4DBFBCC /* BoltBattery.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BoltBattery.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2BB28BFE768F533018F295B3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		42B6E8B7A7E021362E127A89 /* BoltBattery.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoltBattery.entitlements; sourceTree = "<group>"; };
+		5C91C7574795AC4D5E5BB718 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		6C0A6DADD867BEE55FDBFC66 /* SnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotStore.swift; sourceTree = "<group>"; };
+		833573A503A1749F102FA792 /* BoltBatteryWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoltBatteryWidget.swift; sourceTree = "<group>"; };
+		8ABB511BCD6F95A6EF842BDF /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B9843BF340EFD309561F952E /* Logi-Bolt-Battery */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Logi-Bolt-Battery"; path = ..; sourceTree = SOURCE_ROOT; };
 		C1DCE7769B89A46B30A4A364 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D04D525313CFC3179EF298DF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		DC5FE1DD4EFB8C3A72FAE241 /* BoltBatteryWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BoltBatteryWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EBE9BE04B5DB8A9F7572C934 /* BoltBatteryWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoltBatteryWidget.entitlements; sourceTree = "<group>"; };
+		F53ACE4977571FAA8F832E50 /* BatterySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatterySnapshot.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		081E6F7D87B3DAB3B83A33ED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				38042C336E61710D09B6474C /* WidgetKit.framework in Frameworks */,
+				8DA0AA5B311E790B86439E79 /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0FED071DFA676AD9739AA62E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				1EB72E2252A10A261CA8B45F /* BoltHIDPP in Frameworks */,
+				BB39C2D7FCED0A2D18323E8E /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		7330BAC00501B6F00E3BF062 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				8ABB511BCD6F95A6EF842BDF /* SwiftUI.framework */,
+				5C91C7574795AC4D5E5BB718 /* WidgetKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7984076C1D241B8F8D3EA099 /* BoltBatteryWidget */ = {
+			isa = PBXGroup;
+			children = (
+				EBE9BE04B5DB8A9F7572C934 /* BoltBatteryWidget.entitlements */,
+				833573A503A1749F102FA792 /* BoltBatteryWidget.swift */,
+				2BB28BFE768F533018F295B3 /* Info.plist */,
+			);
+			path = BoltBatteryWidget;
+			sourceTree = "<group>";
+		};
 		A1E090C1FE715CE66A0F5D9E /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				0D6CF948E4DDFC21B4DBFBCC /* BoltBattery.app */,
+				DC5FE1DD4EFB8C3A72FAE241 /* BoltBatteryWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -42,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				D04D525313CFC3179EF298DF /* AppDelegate.swift */,
+				42B6E8B7A7E021362E127A89 /* BoltBattery.entitlements */,
 				C1DCE7769B89A46B30A4A364 /* Info.plist */,
 			);
 			path = BoltBattery;
@@ -59,9 +132,21 @@
 			isa = PBXGroup;
 			children = (
 				C62795097F4992202168F972 /* BoltBattery */,
+				7984076C1D241B8F8D3EA099 /* BoltBatteryWidget */,
 				D0C431742F8AB00B6E2DB40D /* Packages */,
+				E7DBE9B149733ECB2AC0DE89 /* Shared */,
+				7330BAC00501B6F00E3BF062 /* Frameworks */,
 				A1E090C1FE715CE66A0F5D9E /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		E7DBE9B149733ECB2AC0DE89 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				F53ACE4977571FAA8F832E50 /* BatterySnapshot.swift */,
+				6C0A6DADD867BEE55FDBFC66 /* SnapshotStore.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -73,10 +158,12 @@
 			buildPhases = (
 				3E103C1B9CDC21A24D71DB51 /* Sources */,
 				0FED071DFA676AD9739AA62E /* Frameworks */,
+				F3B4B629B9735E239763E522 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				241DF45365B6A3BB7C68FA4F /* PBXTargetDependency */,
 			);
 			name = BoltBattery;
 			packageProductDependencies = (
@@ -85,6 +172,24 @@
 			productName = BoltBattery;
 			productReference = 0D6CF948E4DDFC21B4DBFBCC /* BoltBattery.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B5BF8C542F8596085E7C4EBC /* BoltBatteryWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 732FB0BFB8C13A45A587A2B8 /* Build configuration list for PBXNativeTarget "BoltBatteryWidget" */;
+			buildPhases = (
+				5ADF7625FC8D1F4DA9CDDD39 /* Sources */,
+				081E6F7D87B3DAB3B83A33ED /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BoltBatteryWidget;
+			packageProductDependencies = (
+			);
+			productName = BoltBatteryWidget;
+			productReference = DC5FE1DD4EFB8C3A72FAE241 /* BoltBatteryWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -96,6 +201,10 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					8D78EA93E48BCC730D46EE61 = {
+						DevelopmentTeam = YOUR_TEAM_ID;
+						ProvisioningStyle = Automatic;
+					};
+					B5BF8C542F8596085E7C4EBC = {
 						DevelopmentTeam = YOUR_TEAM_ID;
 						ProvisioningStyle = Automatic;
 					};
@@ -119,6 +228,7 @@
 			projectRoot = "";
 			targets = (
 				8D78EA93E48BCC730D46EE61 /* BoltBattery */,
+				B5BF8C542F8596085E7C4EBC /* BoltBatteryWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -129,16 +239,37 @@
 			buildActionMask = 2147483647;
 			files = (
 				674433BCDE4B2CE4712120EC /* AppDelegate.swift in Sources */,
+				4CBF5D8ACE5505C56ED0D013 /* BatterySnapshot.swift in Sources */,
+				5CEA2034692A57FE9F66E69B /* SnapshotStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5ADF7625FC8D1F4DA9CDDD39 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				023BC608CC15F216AF10F8CA /* BatterySnapshot.swift in Sources */,
+				8991AA9EDFB7D083B156D567 /* BoltBatteryWidget.swift in Sources */,
+				2710E21624FDD075BE5E946C /* SnapshotStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		241DF45365B6A3BB7C68FA4F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B5BF8C542F8596085E7C4EBC /* BoltBatteryWidget */;
+			targetProxy = 32B78C9132B294D7CA683F11 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		2701D6F1B05F40A371E1E265 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = BoltBattery/BoltBattery.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = BoltBattery/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -213,10 +344,49 @@
 			};
 			name = Release;
 		};
+		88DE302B538CE8029EC6F48D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BoltBatteryWidget/BoltBatteryWidget.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = BoltBatteryWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = industries.stark.boltbattery.widget;
+				PRODUCT_NAME = BoltBatteryWidget;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		8EF3669CA5BC3D9D2B2DEEBA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BoltBatteryWidget/BoltBatteryWidget.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = BoltBatteryWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = industries.stark.boltbattery.widget;
+				PRODUCT_NAME = BoltBatteryWidget;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 		A64BB15FE6AB97E7E3746504 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = BoltBattery/BoltBattery.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = BoltBattery/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -301,6 +471,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		732FB0BFB8C13A45A587A2B8 /* Build configuration list for PBXNativeTarget "BoltBatteryWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				88DE302B538CE8029EC6F48D /* Debug */,
+				8EF3669CA5BC3D9D2B2DEEBA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		7C03DE3C30084E71D4CF04A5 /* Build configuration list for PBXProject "BoltBattery" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

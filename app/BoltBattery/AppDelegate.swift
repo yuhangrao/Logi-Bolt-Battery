@@ -1,5 +1,6 @@
 import Cocoa
 import BoltHIDPP
+import WidgetKit
 
 @main
 @MainActor
@@ -12,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static let pollInterval: TimeInterval = 5 * 60
+    private static let producerVersion: String =
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
 
     private var statusItem: NSStatusItem!
     private var timer: Timer?
@@ -31,6 +34,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { _ in
             Task { @MainActor [weak self] in await self?.sample() }
         }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleWake(_:)),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleWake(_ note: Notification) {
+        Task { @MainActor [weak self] in await self?.sample() }
     }
 
     private func buildMenu() {
@@ -87,7 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastError = nil
         lastSOC = battery.socPercent
         lastDeviceName = name
-        lastSampledAt = Date()
+        let now = Date()
+        lastSampledAt = now
 
         statusItem.button?.title = "⌨ \(battery.socPercent)%"
 
@@ -98,6 +112,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !trailing.isEmpty { deviceLine += " (\(trailing.joined(separator: ", ")))" }
         deviceMenuItem.title = deviceLine
         refreshSampledLine()
+
+        let previous = SnapshotStore.shared.read()
+        let snapshot = BatterySnapshot(
+            sampledAt: now,
+            socPercent: battery.socPercent,
+            chargingState: battery.chargingState,
+            externalPower: battery.externalPower ?? false,
+            deviceName: name,
+            deviceType: "Keyboard",
+            lastChargeEndedAt: previous?.lastChargeEndedAt,
+            lastChargeEndedPercent: previous?.lastChargeEndedPercent,
+            lastError: nil,
+            producerVersion: Self.producerVersion
+        )
+        SnapshotStore.shared.write(snapshot)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func apply(missingKeyboard: ()) {

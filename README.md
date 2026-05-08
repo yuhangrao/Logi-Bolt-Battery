@@ -35,11 +35,17 @@ Run: `python3 bolt_battery.py` for human-readable output. Flags:
 - `public actor BoltClient` exposes `getProtocolVersion` / `getFeatureIndex` / `getDeviceName` / `getDeviceType` / `getBattery` (UnifiedBattery `0x1004` with fallback to legacy `0x1000`) / `getFirmware` / `discoverKeyboard` / `ping`. Errors are typed `BoltError` (IOKit return codes + HID++ 1.0 / 2.0 protocol errors with raw codes).
 - `bolt-battery-swift` produces the same human and JSON output as `bolt_battery.py`. Verified byte-identical: `swift run bolt-battery-swift --json | jq -S 'del(.devices[].sampledAt)'` == `python3 bolt_battery.py --json | jq -S 'del(.devices[].sampledAt)'` on the live MX Keys S.
 
-`BoltBattery` menu bar host app — Step 4 of the plan.
+`BoltBattery` menu bar host app — Steps 4–5 of the plan.
 
 - Lives under `app/`. Project is declared in `app/project.yml` (XcodeGen) and signed with the Personal Team locked in `docs/open-decisions.md` D8.
-- Build: `brew install xcodegen` once, then `cd app && xcodegen generate && xcodebuild -scheme BoltBattery -configuration Debug build`. Open the resulting `BoltBattery.app` to see `⌨ N%` in the menu bar — the app polls the Bolt receiver every 5 minutes via `BoltHIDPP` and updates the title plus a small drop-down (`MX Keys S — N% (state)`, `Last sampled X ago`, `Quit`).
-- This step explicitly does **not** touch App Group / WidgetKit / login items / preferences — see `docs/development-plan.md` Step 4 for scope.
+- Build: `brew install xcodegen` once, then `cd app && xcodegen generate && xcodebuild -scheme BoltBattery -configuration Debug build`. Open the resulting `BoltBattery.app` to see `⌨ N%` in the menu bar — the app polls the Bolt receiver every 5 minutes via `BoltHIDPP` and updates the title plus a small drop-down (`MX Keys S — N% (state)`, `Last sampled X ago`, `Quit`). It also wakes from `NSWorkspace.didWakeNotification` for an immediate post-sleep sample.
+- After every successful sample the app writes a `BatterySnapshot` (`app/Shared/BatterySnapshot.swift`) into the App Group `YOUR_TEAM_ID.industries.stark.boltbattery` via `SnapshotStore.shared.write(...)`. Inspect with `/usr/libexec/PlistBuddy -c "Print :snapshot" ~/Library/Group\ Containers/YOUR_TEAM_ID.industries.stark.boltbattery/Library/Preferences/YOUR_TEAM_ID.industries.stark.boltbattery.plist` (a non-entitled `defaults read <group>` will say "Domain does not exist" — that's expected for App Group plists on macOS).
+
+`BoltBatteryWidget` widget extension — Step 6 of the plan.
+
+- Embedded inside `BoltBattery.app/Contents/PlugIns/BoltBatteryWidget.appex`. Bundle ID `industries.stark.boltbattery.widget`, sandboxed, sharing the same App Group as the host so it can read `BatterySnapshot`.
+- `app/BoltBatteryWidget/BoltBatteryWidget.swift` is a `@main` `Widget` exposing one `.systemSmall` configuration. The `TimelineProvider` reads `SnapshotStore.shared.read()` and emits a single entry with `policy: .never`; the host app calls `WidgetCenter.shared.reloadAllTimelines()` after each successful sample so the widget always reflects the latest snapshot. Visual is a placeholder (ring + percent + device name) — Step 7 will polish it to match the reference battery widget.
+- After building, drag *Bolt Battery* from Notification Center → Edit Widgets to add it. The same `cd app && xcodegen generate && xcodebuild ...` command builds both targets in one go.
 
 ## Planned: independent macOS widget
 

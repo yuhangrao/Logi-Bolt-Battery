@@ -25,6 +25,7 @@ targets:
     deploymentTarget: "13.0"
     sources:
       - BoltBattery
+      - Shared
     info:
       path: BoltBattery/Info.plist
       properties:
@@ -34,6 +35,11 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSHumanReadableCopyright: ""
+    entitlements:
+      path: BoltBattery/BoltBattery.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - YOUR_TEAM_ID.industries.stark.boltbattery
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: industries.stark.boltbattery
@@ -42,3 +48,35 @@ targets:
     dependencies:
       - package: BoltHIDPP
         product: BoltHIDPP
+      - sdk: WidgetKit.framework
+      - target: BoltBatteryWidget
+
+  BoltBatteryWidget:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - BoltBatteryWidget
+      - Shared
+    info:
+      path: BoltBatteryWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Bolt Battery Widget
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: BoltBatteryWidget/BoltBatteryWidget.entitlements
+      properties:
+        com.apple.security.app-sandbox: YES
+        com.apple.security.application-groups:
+          - YOUR_TEAM_ID.industries.stark.boltbattery
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: industries.stark.boltbattery.widget
+        PRODUCT_NAME: BoltBatteryWidget
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
