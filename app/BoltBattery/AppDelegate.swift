@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        menu.delegate = self
 
         deviceMenuItem = NSMenuItem(title: "Sampling…", action: nil, keyEquivalent: "")
         deviceMenuItem.isEnabled = false
@@ -151,8 +152,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastSampledMenuItem.title = "Last sampled: never"
             return
         }
+        let now = Date()
+        if now.timeIntervalSince(t) < 1 {
+            lastSampledMenuItem.title = "Last sampled just now"
+            return
+        }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        lastSampledMenuItem.title = "Last sampled \(formatter.localizedString(for: t, relativeTo: Date()))"
+        lastSampledMenuItem.title = "Last sampled \(formatter.localizedString(for: t, relativeTo: now))"
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        refreshSampledLine()
     }
 }
