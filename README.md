@@ -29,11 +29,11 @@ Run: `python3 bolt_battery.py` for human-readable output. Flags:
 - `--device-type keyboard` — only the first keyboard, and JSON mode unwraps to a single object (e.g. `python3 bolt_battery.py --json --device-type keyboard | jq '.socPercent'`)
 - `--debug` — print raw HID++ frames to stderr (safe to combine with `--json`)
 
-`BoltHIDPP` Swift package — IOKit binding scaffold (Step 2 of the plan).
+`BoltHIDPP` Swift package — full HID++ 2.0 port (Steps 2–3 of the plan).
 
-- `swift build` / `swift test` / `swift run bolt-battery-swift`
-- Library target `BoltHIDPP` exposes `public actor BoltClient` with `init() throws` / `ping() async throws -> UInt8` / `close()`. `ping()` issues HID++ 2.0 `root.GetProtocolVersion(devIdx=1, pingdata=0xAA)` and returns the echoed byte (`0xAA`) — same value `bolt_battery.py --debug` shows in the first response frame
-- Business protocol layer (battery / name / firmware / device discovery) is deferred to Step 3
+- `swift build` / `swift test` / `swift run bolt-battery-swift [--json] [--device-type any|keyboard]`
+- `public actor BoltClient` exposes `getProtocolVersion` / `getFeatureIndex` / `getDeviceName` / `getDeviceType` / `getBattery` (UnifiedBattery `0x1004` with fallback to legacy `0x1000`) / `getFirmware` / `discoverKeyboard` / `ping`. Errors are typed `BoltError` (IOKit return codes + HID++ 1.0 / 2.0 protocol errors with raw codes).
+- `bolt-battery-swift` produces the same human and JSON output as `bolt_battery.py`. Verified byte-identical: `swift run bolt-battery-swift --json | jq -S 'del(.devices[].sampledAt)'` == `python3 bolt_battery.py --json | jq -S 'del(.devices[].sampledAt)'` on the live MX Keys S.
 
 ## Planned: independent macOS widget
 
