@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Talk HID++ 2.0 to a Logitech Bolt receiver via macOS IOKit. No deps."""
 
+import argparse
 import ctypes
+import json
 import struct
 import sys
 import time
+from datetime import datetime, timezone
 from ctypes import (
     CFUNCTYPE, POINTER, byref, c_char_p, c_double, c_int, c_int32,
     c_long, c_uint8, c_uint32, c_void_p, sizeof,
@@ -158,7 +161,8 @@ class BoltClient:
                 data = data[1:]
             client._last = (int(rid), data)
             if client.debug:
-                print(f"  <<< rid=0x{rid:02x} len={length} payload={data.hex()}")
+                print(f"  <<< rid=0x{rid:02x} len={length} payload={data.hex()}",
+                      file=sys.stderr)
 
         self._cb = cb
         IOKIT.IOHIDDeviceRegisterInputReportCallback(
@@ -184,7 +188,8 @@ class BoltClient:
 
         if self.debug:
             print(f"  >>> rid=0x11 dev={device_idx:#04x} feat={feature_idx:#04x} "
-                  f"fn={function} swid={SWID} params={bytes(params).hex()}")
+                  f"fn={function} swid={SWID} params={bytes(params).hex()}",
+                  file=sys.stderr)
 
         self._last = None
         cbuf = (c_uint8 * 20).from_buffer(buf)
@@ -350,60 +355,131 @@ class BoltClient:
         return firmwares, None
 
 
+def sample_device(bolt, idx):
+    """Probe one device index. Returns a dict (snapshot fields + CLI extras) or None."""
+    ver, err = bolt.get_protocol_version(idx)
+    if err:
+        return None
+
+    out = {
+        "index": idx,
+        "protocol": f"{ver[0]}.{ver[1]}",
+        "ping": ver[2],
+    }
+
+    dtype, err = bolt.get_device_type(idx)
+    out["deviceType"] = dtype if not err else None
+
+    name, err = bolt.get_device_name(idx)
+    out["deviceName"] = name if not err else None
+
+    bat, err = bolt.get_battery(idx)
+    if not err and bat:
+        out["socPercent"] = bat.get("soc_percent")
+        # Normalize: UnifiedBattery exposes "charging"; legacy exposes "status".
+        out["chargingState"] = bat.get("charging") or bat.get("status")
+        out["externalPower"] = bat.get("external_power")
+        out["batteryFeature"] = bat.get("feature")
+    else:
+        out["socPercent"] = None
+        out["chargingState"] = None
+        out["externalPower"] = None
+        out["batteryFeature"] = None
+        out["batteryError"] = err
+
+    fw, err = bolt.get_firmware(idx)
+    out["firmware"] = fw if (not err and fw) else []
+
+    return out
+
+
+def print_human(devices):
+    for d in devices:
+        print(f"━━━ Device #{d['index']} ━━━")
+        print(f"  HID++ protocol: {d['protocol']} (echo {d['ping']:#04x})")
+        print(f"  Type:           {d.get('deviceType') or '<unknown>'}")
+        print(f"  Name:           {d.get('deviceName') or '<unknown>'}")
+
+        if d.get("socPercent") is not None:
+            extra = []
+            if d.get("chargingState"):
+                extra.append(d["chargingState"])
+            if d.get("externalPower"):
+                extra.append("plugged in")
+            tail = f" [{', '.join(extra)}]" if extra else ""
+            feat = d.get("batteryFeature") or ""
+            print(f"  Battery:        {d['socPercent']}%{tail}  ({feat})")
+        else:
+            print(f"  Battery:        <{d.get('batteryError', 'n/a')}>")
+
+        for line in d.get("firmware", []):
+            print(f"  Firmware:       {line}")
+        print()
+
+
 def main():
-    debug = "--debug" in sys.argv
-    bolt = BoltClient(debug=debug)
+    p = argparse.ArgumentParser(
+        description="Read battery / firmware of devices paired to a Logitech Bolt receiver.",
+    )
+    p.add_argument("--debug", action="store_true",
+                   help="Print HID++ frames to stderr.")
+    p.add_argument("--json", action="store_true",
+                   help="Emit machine-readable JSON on stdout.")
+    p.add_argument("--device-type", choices=["any", "keyboard"], default="any",
+                   help="Filter to the first keyboard, or all devices (default: any).")
+    args = p.parse_args()
+
+    bolt = BoltClient(debug=args.debug)
     try:
         bolt.open()
     except RuntimeError as e:
-        print(f"FAILED: {e}", file=sys.stderr)
+        if args.json:
+            json.dump({"error": str(e)}, sys.stdout)
+            sys.stdout.write("\n")
+        else:
+            print(f"FAILED: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"✓ Bolt receiver opened (device handle 0x{bolt.device:x})\n")
+    if not args.json:
+        print(f"✓ Bolt receiver opened (device handle 0x{bolt.device:x})\n")
 
-    found = 0
+    devices = []
     try:
         for idx in range(1, 7):
-            ver, err = bolt.get_protocol_version(idx)
-            if err:
-                if debug:
-                    print(f"--- Device #{idx}: {err}")
+            d = sample_device(bolt, idx)
+            if d is None:
                 continue
-            found += 1
-            print(f"━━━ Device #{idx} ━━━")
-            print(f"  HID++ protocol: {ver[0]}.{ver[1]} (echo {ver[2]:#04x})")
-
-            dtype, err = bolt.get_device_type(idx)
-            print(f"  Type:           {dtype if not err else f'<{err}>'}")
-
-            name, err = bolt.get_device_name(idx)
-            print(f"  Name:           {name if not err else f'<{err}>'}")
-
-            bat, err = bolt.get_battery(idx)
-            if not err:
-                soc = bat.get("soc_percent")
-                feat = bat["feature"]
-                extra = []
-                if "charging" in bat:
-                    extra.append(bat["charging"])
-                if bat.get("external_power"):
-                    extra.append("plugged in")
-                if "status" in bat:
-                    extra.append(bat["status"])
-                tail = f" [{', '.join(extra)}]" if extra else ""
-                print(f"  Battery:        {soc}%{tail}  ({feat})")
-            else:
-                print(f"  Battery:        <{err}>")
-
-            fw, err = bolt.get_firmware(idx)
-            if not err and fw:
-                for line in fw:
-                    print(f"  Firmware:       {line}")
-            print()
-        if found == 0:
-            print("No paired devices answered. Wake them (touch a key/move the mouse) and re-run.")
+            if args.device_type == "keyboard" and d.get("deviceType") != "Keyboard":
+                continue
+            devices.append(d)
+            if args.device_type == "keyboard":
+                break
     finally:
         bolt.close()
+
+    sampled_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for d in devices:
+        d["sampledAt"] = sampled_at
+
+    if args.json:
+        if args.device_type == "keyboard":
+            payload = devices[0] if devices else None
+        else:
+            payload = {"devices": devices}
+        json.dump(payload, sys.stdout, indent=2, ensure_ascii=False)
+        sys.stdout.write("\n")
+        sys.exit(0 if devices else 1)
+
+    if not devices:
+        if args.device_type == "keyboard":
+            print("No keyboard found among paired devices. "
+                  "Wake it (touch a key) and re-run.")
+        else:
+            print("No paired devices answered. "
+                  "Wake them (touch a key/move the mouse) and re-run.")
+        sys.exit(1)
+
+    print_human(devices)
 
 
 if __name__ == "__main__":
