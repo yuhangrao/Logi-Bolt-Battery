@@ -1,0 +1,44 @@
+name: BoltBattery
+options:
+  deploymentTarget:
+    macOS: "13.0"
+  developmentLanguage: en
+  generateEmptyDirectories: true
+
+packages:
+  BoltHIDPP:
+    path: ".."
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: YOUR_TEAM_ID
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_HARDENED_RUNTIME: YES
+
+targets:
+  BoltBattery:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - BoltBattery
+    info:
+      path: BoltBattery/Info.plist
+      properties:
+        LSUIElement: YES
+        CFBundleName: BoltBattery
+        CFBundleDisplayName: Bolt Battery
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSHumanReadableCopyright: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: industries.stark.boltbattery
+        PRODUCT_NAME: BoltBattery
+        COMBINE_HIDPI_IMAGES: YES
+    dependencies:
+      - package: BoltHIDPP
+        product: BoltHIDPP
