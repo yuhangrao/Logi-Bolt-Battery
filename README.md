@@ -47,25 +47,25 @@ Run: `python3 bolt_battery.py` for human-readable output. Flags:
 - `app/BoltBatteryWidget/BoltBatteryWidget.swift` is a `@main` `Widget` exposing one `.systemSmall` configuration. The `TimelineProvider` reads `SnapshotStore.shared.read()` and emits a single entry with `policy: .never`; the host app calls `WidgetCenter.shared.reloadAllTimelines()` after each successful sample so the widget always reflects the latest snapshot. Visual is a placeholder (ring + percent + device name) — Step 7 will polish it to match the reference battery widget.
 - After building, drag *Bolt Battery* from Notification Center → Edit Widgets to add it. The same `cd app && xcodegen generate && xcodebuild ...` command builds both targets in one go.
 
-## Planned: independent macOS widget
+## Why a separate widget
 
 Apple's built-in Batteries widget is fed by the private `com.apple.BatteryCenter` framework, which only sees devices that publish a `BatteryPercent` property in IORegistry. The Bolt receiver presents itself to macOS as a generic USB HID composite device, hiding the real keyboard/mouse battery behind Logitech's HID++ protocol — so it can't be merged into Apple's widget without virtualizing a BLE peripheral (impossible on macOS userspace) or shipping a DriverKit DEXT (entitlement-gated, brittle).
 
-Instead this repo will ship a **standalone Notification Center widget** that pulls its data from our HID++ probe and renders next to Apple's widget with the same visual language.
+This repo therefore ships a **standalone Notification Center widget** with its own data path: the menu bar app polls the receiver via `BoltHIDPP`, writes a `BatterySnapshot` into an App Group, and the widget extension renders it.
 
-### Widget spec
+### Goal visual
 
 - **Form factor:** macOS small widget (single rectangle), visual style matching Apple's built-in Batteries widget — rounded dark background, circular progress ring, device glyph in the center, identical color ramp (green / yellow / red)
 - **Primary readout:** current battery percentage + charging state, matching Apple's widget behavior (ring fills clockwise, ring color reflects level, glyph shows charging bolt when applicable)
 - **Footer line:** small English text — `Last charged <duration> ago to <percent>%` (e.g. `Last charged 3h ago to 100%`)
 
-### Implementation
+### Roadmap
 
-Designed, not coded yet. The widget and its menu-bar host app will live in this repo (single-repo layout, see `docs/open-decisions.md` D9). Implementation is broken into 10 independent steps — see:
+Implementation is broken into 10 independent steps. **Steps 1–6 are landed** (Python protocol probe → Swift HID++ port → menu bar host app → App Group snapshot → widget extension scaffold with placeholder visual). Remaining: Step 7 visual polish, Step 8 "Last charged" footer, Step 9 degraded/error states, Step 10 packaging + login item + release docs. Detail in:
 
 - [`docs/architecture.md`](docs/architecture.md) — three-tier architecture (HID++ producer → App Group snapshot → widget extension), refresh strategy, macOS-specific App Group quirks
 - [`docs/development-plan.md`](docs/development-plan.md) — Step 0–10 with scope, acceptance criteria, and explicit non-goals per step
-- [`docs/open-decisions.md`](docs/open-decisions.md) — pending decisions (data pathway, language, sampling frequency, bundle ID, etc.)
+- [`docs/open-decisions.md`](docs/open-decisions.md) — locked design decisions
 
 ## Requirements
 
@@ -73,4 +73,4 @@ Designed, not coded yet. The widget and its menu-bar host app will live in this 
 - A Logi Bolt receiver (`VID 0x046D`, `PID 0xC548`) plugged in
 - Python 3 with stdlib (no pip installs needed for `bolt_battery.py`)
 - For the Swift package (Step 2+): Xcode Command Line Tools (`xcode-select --install`); Swift 5.9+ toolchain. Tested on Swift 6.3.1 / Xcode 26
-- For the menu bar app and the upcoming widget (Step 4+): full Xcode 14+ install, plus an Apple ID added to Xcode → Settings → Accounts (Personal Team is sufficient — see `docs/open-decisions.md` D8). Also `brew install xcodegen` for regenerating `app/BoltBattery.xcodeproj` from `app/project.yml`.
+- For the menu bar app and widget extension (Steps 4+): full Xcode 14+ install, plus an Apple ID added to Xcode → Settings → Accounts (Personal Team is sufficient — see `docs/open-decisions.md` D8). Also `brew install xcodegen` for regenerating `app/BoltBattery.xcodeproj` from `app/project.yml`.
