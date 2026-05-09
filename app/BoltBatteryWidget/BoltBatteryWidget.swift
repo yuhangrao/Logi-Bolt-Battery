@@ -152,39 +152,44 @@ private struct BatteryRing: View {
     let forceGray: Bool
 
     private let lineWidth: CGFloat = 6.5
-    // Apple ships two bolt assets: 14x19pt (single-device hero) and 9x12pt
-    // (multi-device cells). Our per-device ring proportions match the cell
-    // size, so use the small variant. The 14x19 vector path scales cleanly
-    // into the smaller frame.
-    private let boltDesignWidth: CGFloat = 9
-    private let boltDesignHeight: CGFloat = 12
-    private let boltHaloPadding: CGFloat = 2
+    // ~20% of our 63pt ring outer diameter, matching Apple's bolt-to-ring
+    // proportion measured from a high-res Batteries widget reference. Apple's
+    // 14x19 hero asset is too big for our cell-sized ring; the 9x12 small
+    // asset reads as too small. The vector path scales cleanly into 12x16.
+    private let boltDesignWidth: CGFloat = 12
+    private let boltDesignHeight: CGFloat = 16
+    // 2pt halo on each side, matching Apple's bolt-shaped knockout mask
+    // (which is the same path stroked at lineWidth 4).
+    private let maskStrokeWidth: CGFloat = 4
 
     var body: some View {
         GeometryReader { geo in
             let radius = min(geo.size.width, geo.size.height) / 2
-            // Carve a gap in the progress arc wide enough for the bolt + halo
-            // + the rounded line cap that pokes past the trim endpoint. Track
-            // stays full so the gap reads as the same gray as the empty arc,
-            // matching the reference battery widget where the bolt sits on track,
-            // not on widget background.
-            let gapFraction: CGFloat = isCharging
-                ? (boltDesignWidth + lineWidth + 2 * boltHaloPadding) / (2 * .pi * radius)
-                : 0
-            let gapHalf = gapFraction / 2
-            let availableArc = 1 - gapFraction
-            let progressEnd = gapHalf + ringFraction * availableArc
-
             ZStack {
                 Circle()
                     .stroke(Color.secondary.opacity(0.22), lineWidth: lineWidth)
                 Circle()
-                    .trim(from: gapHalf, to: progressEnd)
+                    .trim(from: 0, to: ringFraction)
                     .stroke(
                         ringColor,
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
+
+                if isCharging {
+                    // Bolt-shaped knockout: same path, fill + 4pt stroke. After
+                    // destinationOut this carves a bolt + uniform 2pt halo
+                    // through both track and progress, so the ring tapers
+                    // along the bolt's wing edges. Gap reads as the widget
+                    // background, which is what the reference battery widget does.
+                    ZStack {
+                        BoltShape().fill(Color.black)
+                        BoltShape().stroke(Color.black, lineWidth: maskStrokeWidth)
+                    }
+                    .frame(width: boltDesignWidth, height: boltDesignHeight)
+                    .offset(y: -radius)
+                    .blendMode(.destinationOut)
+                }
 
                 Image(systemName: glyphSymbolName)
                     .font(.system(size: 24, weight: .regular))
@@ -197,6 +202,7 @@ private struct BatteryRing: View {
                         .offset(y: -radius)
                 }
             }
+            .compositingGroup()
             .frame(width: geo.size.width, height: geo.size.height)
         }
     }
