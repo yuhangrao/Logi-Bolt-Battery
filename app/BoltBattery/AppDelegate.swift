@@ -122,17 +122,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logo.draw(in: rect)
             guard charging else { return true }
 
-            let boltConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .bold)
+            let boltConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold)
             guard let bolt = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)?
                 .withSymbolConfiguration(boltConfig) else { return true }
             let boltSize = bolt.size
-            let inset: CGFloat = 0
             let boltRect = NSRect(
-                x: rect.maxX - boltSize.width - inset,
-                y: rect.minY + inset,
+                x: rect.maxX - boltSize.width,
+                y: rect.minY,
                 width: boltSize.width,
                 height: boltSize.height
             )
+
+            // Carve a transparent halo so the bolt stays visible against the logo.
+            // In template images everything non-transparent is filled with one tint,
+            // so a literal alpha=0 gap is the only way to give the bolt an outline.
+            if let context = NSGraphicsContext.current {
+                let saved = context.compositingOperation
+                context.compositingOperation = .destinationOut
+                NSColor.black.setFill()
+                let halo = boltRect.insetBy(dx: -1.25, dy: -1.25)
+                NSBezierPath(ovalIn: halo).fill()
+                context.compositingOperation = saved
+            }
+
             bolt.draw(in: boltRect)
             return true
         }
