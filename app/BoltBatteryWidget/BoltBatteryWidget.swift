@@ -112,31 +112,32 @@ private struct BatteryRing: View {
 
     private let lineWidth: CGFloat = 6.5
     private let boltSize: CGFloat = 10
-    private let chargingGapDegrees: Double = 40
+    private let boltHaloSize: CGFloat = 13.5
 
     var body: some View {
         GeometryReader { geo in
             let radius = min(geo.size.width, geo.size.height) / 2
-            let gapFraction: CGFloat = isCharging ? CGFloat(chargingGapDegrees / 360) : 0
-            let gapHalf = gapFraction / 2
-            let availableArc = 1 - gapFraction
-            let progressEnd = gapHalf + ringFraction * availableArc
-
             ZStack {
                 Circle()
-                    .trim(from: gapHalf, to: 1 - gapHalf)
-                    .stroke(
-                        Color.secondary.opacity(0.22),
-                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
+                    .stroke(Color.secondary.opacity(0.22), lineWidth: lineWidth)
                 Circle()
-                    .trim(from: gapHalf, to: progressEnd)
+                    .trim(from: 0, to: ringFraction)
                     .stroke(
                         ringColor,
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
+
+                if isCharging {
+                    // Bolt-shaped cutout — slightly bigger + heavier so the ring is
+                    // sliced along the bolt's silhouette and tapers to a tip on
+                    // each side, matching the reference battery widget.
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: boltHaloSize, weight: .black))
+                        .foregroundStyle(Color.black)
+                        .offset(y: -radius)
+                        .blendMode(.destinationOut)
+                }
 
                 Image(systemName: glyphSymbolName)
                     .font(.system(size: 24, weight: .regular))
@@ -149,6 +150,7 @@ private struct BatteryRing: View {
                         .offset(y: -radius)
                 }
             }
+            .compositingGroup()
             .frame(width: geo.size.width, height: geo.size.height)
         }
     }
