@@ -193,7 +193,7 @@ private struct BatteryRing: View {
 
                 Image(systemName: glyphSymbolName)
                     .font(.system(size: 24, weight: .regular))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
 
                 if isCharging {
                     BoltShape()
