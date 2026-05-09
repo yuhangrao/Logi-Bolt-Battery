@@ -158,9 +158,9 @@ private struct BatteryRing: View {
     // asset reads as too small. The vector path scales cleanly into 12x16.
     private let boltDesignWidth: CGFloat = 12
     private let boltDesignHeight: CGFloat = 16
-    // 2pt halo on each side, matching Apple's bolt-shaped knockout mask
-    // (which is the same path stroked at lineWidth 4).
-    private let maskStrokeWidth: CGFloat = 4
+    // 1.5pt halo on each side, matching Apple's bolt-shaped knockout mask
+    // (which is the same path stroked at lineWidth 3).
+    private let maskStrokeWidth: CGFloat = 3
 
     var body: some View {
         GeometryReader { geo in
