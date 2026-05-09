@@ -122,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logo.draw(in: rect)
             guard charging else { return true }
 
-            let boltConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold)
+            let boltConfig = NSImage.SymbolConfiguration(pointSize: 8, weight: .bold)
             guard let bolt = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)?
                 .withSymbolConfiguration(boltConfig) else { return true }
             let boltSize = bolt.size
@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let saved = context.compositingOperation
                 context.compositingOperation = .destinationOut
                 NSColor.black.setFill()
-                let halo = boltRect.insetBy(dx: -1.25, dy: -1.25)
+                let halo = boltRect.insetBy(dx: -0.75, dy: -0.75)
                 NSBezierPath(ovalIn: halo).fill()
                 context.compositingOperation = saved
             }

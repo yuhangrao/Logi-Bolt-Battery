@@ -111,6 +111,8 @@ private struct BatteryRing: View {
     let forceGray: Bool
 
     private let lineWidth: CGFloat = 6.5
+    private let boltSize: CGFloat = 10
+    private let boltGapDiameter: CGFloat = 14
 
     var body: some View {
         GeometryReader { geo in
@@ -126,17 +128,26 @@ private struct BatteryRing: View {
                     )
                     .rotationEffect(.degrees(-90))
 
+                if isCharging {
+                    Circle()
+                        .fill(Color.black)
+                        .frame(width: boltGapDiameter, height: boltGapDiameter)
+                        .offset(y: -radius)
+                        .blendMode(.destinationOut)
+                }
+
                 Image(systemName: glyphSymbolName)
                     .font(.system(size: 24, weight: .regular))
                     .foregroundStyle(.primary)
 
                 if isCharging {
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
+                        .font(.system(size: boltSize, weight: .bold))
+                        .foregroundStyle(boltColor)
                         .offset(y: -radius)
                 }
             }
+            .compositingGroup()
             .frame(width: geo.size.width, height: geo.size.height)
         }
     }
@@ -151,6 +162,11 @@ private struct BatteryRing: View {
         if isCharging { return .green }
         guard let s = socPercent else { return .gray }
         return s <= 20 ? .red : .green
+    }
+
+    private var boltColor: Color {
+        guard let s = socPercent else { return .white }
+        return s >= 100 ? .green : .white
     }
 }
 
