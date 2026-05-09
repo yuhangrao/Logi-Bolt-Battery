@@ -151,40 +151,40 @@ public actor BoltClient {
     }
 
     public func getBattery(deviceIndex: UInt8) async throws -> BatteryReading {
-        if let unifiedIdx = try? await getFeatureIndex(deviceIndex: deviceIndex, featureID: HIDPP.featureBatteryUnified) {
-            if let response = try? await call(
+        if let unifiedIdx = try await getFeatureIndex(deviceIndex: deviceIndex, featureID: HIDPP.featureBatteryUnified) {
+            let response = try await call(
                 deviceIndex: deviceIndex,
                 featureIndex: unifiedIdx,
                 function: 0x01,
                 params: []
-            ), response.count >= 6 {
-                let stateRaw = response[5]
-                let chargeState = HIDPP.chargingStateUnified[stateRaw] ?? "unknown(\(stateRaw))"
-                let externalPower: Bool? = response.count > 6 ? response[6] != 0 : nil
-                return BatteryReading(
-                    socPercent: Int(response[3]),
-                    chargingState: chargeState,
-                    externalPower: externalPower,
-                    feature: BatteryReading.unifiedFeatureLabel
-                )
-            }
+            )
+            guard response.count >= 6 else { throw BoltError.invalidResponse }
+            let stateRaw = response[5]
+            let chargeState = HIDPP.chargingStateUnified[stateRaw] ?? "unknown(\(stateRaw))"
+            let externalPower: Bool? = response.count > 6 ? response[6] != 0 : nil
+            return BatteryReading(
+                socPercent: Int(response[3]),
+                chargingState: chargeState,
+                externalPower: externalPower,
+                feature: BatteryReading.unifiedFeatureLabel
+            )
         }
-        if let legacyIdx = try? await getFeatureIndex(deviceIndex: deviceIndex, featureID: HIDPP.featureBatteryLegacy) {
-            if let response = try? await call(
+        if let legacyIdx = try await getFeatureIndex(deviceIndex: deviceIndex, featureID: HIDPP.featureBatteryLegacy) {
+            let response = try await call(
                 deviceIndex: deviceIndex,
                 featureIndex: legacyIdx,
                 function: 0x00,
                 params: []
-            ), response.count >= 6 {
-                let statusRaw = response[5]
-                let status = HIDPP.chargingStatusLegacy[statusRaw] ?? "unknown(\(statusRaw))"
-                return BatteryReading(
-                    socPercent: Int(response[3]),
-                    chargingState: status,
-                    externalPower: nil,
-                    feature: BatteryReading.legacyFeatureLabel
-                )
-            }
+            )
+            guard response.count >= 6 else { throw BoltError.invalidResponse }
+            let statusRaw = response[5]
+            let status = HIDPP.chargingStatusLegacy[statusRaw] ?? "unknown(\(statusRaw))"
+            return BatteryReading(
+                socPercent: Int(response[3]),
+                chargingState: status,
+                externalPower: nil,
+                feature: BatteryReading.legacyFeatureLabel
+            )
         }
         throw BoltError.featureNotSupported
     }

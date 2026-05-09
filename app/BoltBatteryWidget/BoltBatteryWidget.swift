@@ -1,6 +1,11 @@
 import WidgetKit
 import SwiftUI
 
+private enum WidgetTiming {
+    static let staleInterval: TimeInterval = 30 * 60
+    static let staleRefreshInterval: TimeInterval = 15 * 60
+}
+
 struct BoltBatteryEntry: TimelineEntry {
     let date: Date
     let snapshot: BatterySnapshot?
@@ -30,8 +35,72 @@ struct BoltBatteryProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BoltBatteryEntry>) -> Void) {
-        let entry = BoltBatteryEntry(date: Date(), snapshot: SnapshotStore.shared.read())
-        completion(Timeline(entries: [entry], policy: .never))
+        let now = Date()
+        let snapshot = SnapshotStore.shared.read()
+        let entry = BoltBatteryEntry(date: now, snapshot: snapshot)
+        guard let snapshot else {
+            completion(Timeline(entries: [entry], policy: .never))
+            return
+        }
+
+        let staleDate = snapshot.sampledAt.addingTimeInterval(WidgetTiming.staleInterval + 1)
+        if now < staleDate {
+            let staleEntry = BoltBatteryEntry(date: staleDate, snapshot: snapshot)
+            completion(Timeline(
+                entries: [entry, staleEntry],
+                policy: .after(staleDate.addingTimeInterval(WidgetTiming.staleRefreshInterval))
+            ))
+        } else {
+            completion(Timeline(
+                entries: [entry],
+                policy: .after(now.addingTimeInterval(WidgetTiming.staleRefreshInterval))
+            ))
+        }
+    }
+}
+
+private enum WidgetDisplayState {
+    case missing
+    case stale(BatterySnapshot)
+    case receiverDisconnected(BatterySnapshot)
+    case keyboardOffline(BatterySnapshot)
+    case sampleError(BatterySnapshot, String)
+    case normal(BatterySnapshot)
+
+    var snapshot: BatterySnapshot? {
+        switch self {
+        case .missing:
+            return nil
+        case .stale(let snapshot),
+             .receiverDisconnected(let snapshot),
+             .keyboardOffline(let snapshot),
+             .sampleError(let snapshot, _),
+             .normal(let snapshot):
+            return snapshot
+        }
+    }
+
+    var forcesGrayRing: Bool {
+        switch self {
+        case .missing, .receiverDisconnected, .keyboardOffline, .sampleError:
+            return true
+        case .stale, .normal:
+            return false
+        }
+    }
+
+    var contentOpacity: Double {
+        switch self {
+        case .stale:
+            return 0.5
+        default:
+            return 1
+        }
+    }
+
+    var showsChargingIndicator: Bool {
+        guard case .normal(let snapshot) = self else { return false }
+        return snapshot.chargingState.lowercased().hasPrefix("charging")
     }
 }
 
@@ -39,6 +108,7 @@ private struct BatteryRing: View {
     let socPercent: Int?
     let isCharging: Bool
     let glyphSymbolName: String
+    let forceGray: Bool
 
     private let lineWidth: CGFloat = 6.5
 
@@ -77,6 +147,7 @@ private struct BatteryRing: View {
     }
 
     private var ringColor: Color {
+        if forceGray { return .gray }
         if isCharging { return .green }
         guard let s = socPercent else { return .gray }
         return s <= 20 ? .red : .green
@@ -98,26 +169,30 @@ struct BoltBatteryWidgetEntryView: View {
             let ringRight = ringCenterX + ringDiameter / 2
             let percentCenterX = (ringRight + geo.size.width) / 2
             let bottomRowCenterY = 2 * verticalGap + gridRingDiameter * 1.5
+            let state = displayState
 
             ZStack(alignment: .topLeading) {
                 BatteryRing(
-                    socPercent: entry.snapshot?.socPercent,
-                    isCharging: isCharging,
-                    glyphSymbolName: "keyboard"
+                    socPercent: state.snapshot?.socPercent,
+                    isCharging: state.showsChargingIndicator,
+                    glyphSymbolName: "keyboard",
+                    forceGray: state.forcesGrayRing
                 )
                 .frame(width: ringDiameter, height: ringDiameter)
+                .opacity(state.contentOpacity)
                 .position(x: ringCenterX, y: topRowCenterY)
 
-                Text(percentText)
+                Text(percentText(for: state))
                     .font(.system(size: 31, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .fixedSize()
+                    .opacity(state.contentOpacity)
                     .position(x: percentCenterX, y: topRowCenterY)
 
-                footerText
+                footerText(for: state)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -129,26 +204,52 @@ struct BoltBatteryWidgetEntryView: View {
         }
     }
 
-    private var isCharging: Bool {
-        guard let state = entry.snapshot?.chargingState.lowercased() else { return false }
-        return state.hasPrefix("charging")
+    private var displayState: WidgetDisplayState {
+        guard let snapshot = entry.snapshot else { return .missing }
+        if entry.date.timeIntervalSince(snapshot.sampledAt) > WidgetTiming.staleInterval {
+            return .stale(snapshot)
+        }
+        guard let lastError = snapshot.lastError else { return .normal(snapshot) }
+        if lastError == "Receiver disconnected" {
+            return .receiverDisconnected(snapshot)
+        }
+        if lastError == "Keyboard offline" {
+            return .keyboardOffline(snapshot)
+        }
+        if lastError.hasPrefix("Error:") {
+            return .sampleError(snapshot, lastError)
+        }
+        return .normal(snapshot)
     }
 
-    private var percentText: String {
-        guard let soc = entry.snapshot?.socPercent else { return "—%" }
+    private func percentText(for state: WidgetDisplayState) -> String {
+        guard let soc = state.snapshot?.socPercent else { return "—%" }
         return "\(soc)%"
     }
 
-    private var footerText: Text {
-        guard let lastChargeEndedAt = entry.snapshot?.lastChargeEndedAt,
-              let lastChargeEndedPercent = entry.snapshot?.lastChargeEndedPercent else {
-            return Text("Charge to start tracking")
+    private func footerText(for state: WidgetDisplayState) -> Text {
+        switch state {
+        case .missing:
+            return Text("Open Bolt Battery to start")
+        case .stale(let snapshot):
+            return Text("Updated \(compactElapsedText(since: snapshot.sampledAt, relativeTo: entry.date))")
+        case .receiverDisconnected:
+            return Text("Receiver disconnected")
+        case .keyboardOffline:
+            return Text("Keyboard offline")
+        case .sampleError(_, let errorText):
+            return Text(errorText)
+        case .normal(let snapshot):
+            guard let lastChargeEndedAt = snapshot.lastChargeEndedAt,
+                  let lastChargeEndedPercent = snapshot.lastChargeEndedPercent else {
+                return Text("Charge to start tracking")
+            }
+            return Text("Last charged: \(lastChargeEndedPercent)% · \(compactElapsedText(since: lastChargeEndedAt, relativeTo: entry.date))")
         }
-        return Text("Last charged: \(lastChargeEndedPercent)% · \(compactElapsedText(since: lastChargeEndedAt))")
     }
 
-    private func compactElapsedText(since date: Date) -> String {
-        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+    private func compactElapsedText(since date: Date, relativeTo referenceDate: Date) -> String {
+        let seconds = max(0, Int(referenceDate.timeIntervalSince(date)))
         if seconds < 60 { return "just now" }
         let minutes = seconds / 60
         if minutes < 60 { return "\(minutes) min ago" }
@@ -211,11 +312,13 @@ struct BoltBatteryWidget: Widget {
 private func mockSnapshot(
     soc: Int,
     charging: String,
+    sampledAt: Date = Date(),
     lastChargeEndedAt: Date? = nil,
-    lastChargeEndedPercent: Int? = nil
+    lastChargeEndedPercent: Int? = nil,
+    lastError: String? = nil
 ) -> BatterySnapshot {
     BatterySnapshot(
-        sampledAt: Date(),
+        sampledAt: sampledAt,
         socPercent: soc,
         chargingState: charging,
         externalPower: charging.hasPrefix("charging"),
@@ -223,6 +326,7 @@ private func mockSnapshot(
         deviceType: "Keyboard",
         lastChargeEndedAt: lastChargeEndedAt,
         lastChargeEndedPercent: lastChargeEndedPercent,
+        lastError: lastError,
         producerVersion: "0.1.0"
     )
 }
@@ -261,5 +365,53 @@ private func mockSnapshot(
     BoltBatteryWidget()
 } timeline: {
     BoltBatteryEntry(date: Date(), snapshot: mockSnapshot(soc: 12, charging: "discharging"))
+}
+
+@available(macOS 14.0, *)
+#Preview("Missing Snapshot", as: .systemSmall) {
+    BoltBatteryWidget()
+} timeline: {
+    BoltBatteryEntry(date: Date(), snapshot: nil)
+}
+
+@available(macOS 14.0, *)
+#Preview("Stale Snapshot", as: .systemSmall) {
+    BoltBatteryWidget()
+} timeline: {
+    let sampledAt = Date(timeIntervalSinceNow: -31 * 60)
+    BoltBatteryEntry(
+        date: Date(),
+        snapshot: mockSnapshot(soc: 75, charging: "discharging", sampledAt: sampledAt)
+    )
+}
+
+@available(macOS 14.0, *)
+#Preview("Receiver Disconnected", as: .systemSmall) {
+    BoltBatteryWidget()
+} timeline: {
+    BoltBatteryEntry(
+        date: Date(),
+        snapshot: mockSnapshot(soc: 75, charging: "discharging", lastError: "Receiver disconnected")
+    )
+}
+
+@available(macOS 14.0, *)
+#Preview("Keyboard Offline", as: .systemSmall) {
+    BoltBatteryWidget()
+} timeline: {
+    BoltBatteryEntry(
+        date: Date(),
+        snapshot: mockSnapshot(soc: 75, charging: "discharging", lastError: "Keyboard offline")
+    )
+}
+
+@available(macOS 14.0, *)
+#Preview("HID++ Error", as: .systemSmall) {
+    BoltBatteryWidget()
+} timeline: {
+    BoltBatteryEntry(
+        date: Date(),
+        snapshot: mockSnapshot(soc: 75, charging: "discharging", lastError: "Error: 0x08")
+    )
 }
 #endif

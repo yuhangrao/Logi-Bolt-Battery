@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "slow-recharge"
     ]
     private static let batteryFeatureIDs: [UInt16] = [0x1004, 0x1000]
+    private static let keyboardOfflineThreshold = 6
 
     private var statusItem: NSStatusItem!
     private var timer: Timer?
@@ -48,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardIndex: UInt8?
     private var batteryFeatureIndex: UInt8?
     private var currentPollInterval = AppDelegate.dischargingPollInterval
+    private var keyboardNoResponseCount = 0
     private var isSampling = false
     private var needsSampleAfterCurrent = false
     private var eventSampleTask: Task<Void, Never>?
@@ -130,10 +132,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             client = try await currentClient()
         } catch {
-            apply(error: error)
+            apply(error: error, keyboardNoResponse: false)
             return
         }
 
+        var attemptedKeyboardSample = false
         do {
             let kbIdx: UInt8
             if let cachedIndex = keyboardIndex {
@@ -149,13 +152,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 kbIdx = discoveredIndex
             }
 
+            attemptedKeyboardSample = true
             await updateBatteryFeatureIndex(client: client, deviceIndex: kbIdx)
             let battery = try await client.getBattery(deviceIndex: kbIdx)
             let name = (try? await client.getDeviceName(deviceIndex: kbIdx)) ?? "Keyboard"
             apply(battery: battery, name: name)
         } catch {
             await resetClient()
-            apply(error: error)
+            apply(error: error, keyboardNoResponse: attemptedKeyboardSample && Self.isKeyboardNoResponse(error))
         }
     }
 
@@ -216,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(battery: BatteryReading, name: String) {
+        keyboardNoResponseCount = 0
         lastError = nil
         lastSOC = battery.socPercent
         lastDeviceName = name
@@ -259,21 +264,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(missingKeyboard: ()) {
+        let now = Date()
+        let errorText = nextKeyboardNoResponseText()
         currentPollInterval = Self.dischargingPollInterval
-        lastError = "No keyboard found"
-        lastSampledAt = Date()
+        lastError = errorText
+        lastSampledAt = now
         statusItem.button?.title = "⌨ ?"
-        deviceMenuItem.title = "No keyboard found among paired devices"
+        deviceMenuItem.title = errorText == "Keyboard offline" ? "Keyboard offline" : "No keyboard found among paired devices"
         refreshSampledLine()
+        writeFailureSnapshot(lastError: errorText, sampledAt: now)
     }
 
-    private func apply(error: Error) {
+    private func apply(error: Error, keyboardNoResponse: Bool) {
+        let now = Date()
+        let errorText = normalizedErrorText(for: error, keyboardNoResponse: keyboardNoResponse)
         currentPollInterval = Self.dischargingPollInterval
-        lastError = String(describing: error)
-        lastSampledAt = Date()
+        lastError = errorText
+        lastSampledAt = now
         statusItem.button?.title = "⌨ ?"
-        deviceMenuItem.title = "Error: \(lastError ?? "unknown")"
+        deviceMenuItem.title = menuErrorTitle(for: errorText)
         refreshSampledLine()
+        writeFailureSnapshot(lastError: errorText, sampledAt: now)
+    }
+
+    private func nextKeyboardNoResponseText() -> String {
+        keyboardNoResponseCount += 1
+        return keyboardNoResponseCount > Self.keyboardOfflineThreshold ? "Keyboard offline" : "Keyboard no response"
+    }
+
+    private func normalizedErrorText(for error: Error, keyboardNoResponse: Bool) -> String {
+        if keyboardNoResponse { return nextKeyboardNoResponseText() }
+        keyboardNoResponseCount = 0
+
+        guard let boltError = error as? BoltError else {
+            return "Error: \(String(describing: error))"
+        }
+        switch boltError {
+        case .managerOpenFailed(_), .noMatchingDevice, .deviceOpenFailed(_), .setReportFailed(_):
+            return "Receiver disconnected"
+        case .hidppV1(let code, _, _), .hidppV2(let code, _, _, _):
+            return String(format: "Error: 0x%02X", code)
+        default:
+            return "Error: \(boltError.description)"
+        }
+    }
+
+    private static func isKeyboardNoResponse(_ error: Error) -> Bool {
+        guard let boltError = error as? BoltError else { return false }
+        switch boltError {
+        case .timeout, .featureNotSupported:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func menuErrorTitle(for errorText: String) -> String {
+        if errorText == "Receiver disconnected" || errorText == "Keyboard offline" {
+            return errorText
+        }
+        return errorText.hasPrefix("Error:") ? errorText : "Error: \(errorText)"
+    }
+
+    private func writeFailureSnapshot(lastError: String, sampledAt: Date) {
+        guard let previous = SnapshotStore.shared.read() else {
+            WidgetCenter.shared.reloadAllTimelines()
+            return
+        }
+        let snapshot = BatterySnapshot(
+            sampledAt: sampledAt,
+            socPercent: previous.socPercent,
+            chargingState: previous.chargingState,
+            externalPower: previous.externalPower,
+            deviceName: previous.deviceName,
+            deviceType: previous.deviceType,
+            lastChargeEndedAt: previous.lastChargeEndedAt,
+            lastChargeEndedPercent: previous.lastChargeEndedPercent,
+            lastError: lastError,
+            producerVersion: Self.producerVersion
+        )
+        SnapshotStore.shared.write(snapshot)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func refreshSampledLine() {
