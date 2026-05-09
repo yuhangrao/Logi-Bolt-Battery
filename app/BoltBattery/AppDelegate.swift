@@ -1,5 +1,7 @@
 import Cocoa
 import BoltHIDPP
+import os
+import ServiceManagement
 import WidgetKit
 
 @main
@@ -16,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let chargingPollInterval: TimeInterval = 60
     private static let producerVersion: String =
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
+    private static let logger = Logger(subsystem: "industries.stark.boltbattery", category: "host")
     private static let chargeEndingStates: Set<String> = [
         "charging",
         "charging-slow",
@@ -39,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private var deviceMenuItem: NSMenuItem!
     private var lastSampledMenuItem: NSMenuItem!
+    private var openAtLoginMenuItem: NSMenuItem!
 
     private var lastSampledAt: Date?
     private var lastSOC: Int?
@@ -56,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isCharging = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.logger.info("BoltBattery host starting, version \(Self.producerVersion, privacy: .public)")
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         configureStatusItemIcon()
         buildMenu()
@@ -87,6 +92,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let showLogsItem = NSMenuItem(
+            title: "Show Logs…",
+            action: #selector(handleShowLogs(_:)),
+            keyEquivalent: ""
+        )
+        showLogsItem.target = self
+        menu.addItem(showLogsItem)
+
+        openAtLoginMenuItem = NSMenuItem(
+            title: "Open at Login",
+            action: #selector(handleToggleOpenAtLogin(_:)),
+            keyEquivalent: ""
+        )
+        openAtLoginMenuItem.target = self
+        menu.addItem(openAtLoginMenuItem)
+        refreshOpenAtLoginState()
+
+        menu.addItem(.separator())
+
         let quit = NSMenuItem(
             title: "Quit",
             action: #selector(NSApplication.terminate(_:)),
@@ -114,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makeMenuBarImage(charging: Bool) -> NSImage? {
         guard let logo = NSImage(named: "MenuBarBolt") else {
-            NSLog("MenuBarBolt image asset not found")
+            Self.logger.error("MenuBarBolt image asset not found")
             return nil
         }
         let size = NSSize(width: 20, height: 20)
@@ -252,6 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleUnsolicitedReport(_ report: UnsolicitedReport) {
         guard isBatteryRelated(report) else { return }
+        Self.logger.debug("Battery-related HID++ report received, scheduling sample")
         scheduleEventSample()
     }
 
@@ -286,6 +311,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             : Self.dischargingPollInterval
         isCharging = battery.chargingState.lowercased().hasPrefix("charging")
         refreshStatusItemIcon()
+
+        Self.logger.info("Sampled \(name, privacy: .public): \(battery.socPercent)% \(battery.chargingState, privacy: .public), externalPower=\(battery.externalPower ?? false, privacy: .public)")
 
         var deviceLine = "⌨ \(name) — \(battery.socPercent)%"
         var trailing: [String] = []
@@ -326,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastSampledAt = now
         isCharging = false
         refreshStatusItemIcon()
+        Self.logger.error("Sample failed (missing keyboard): \(errorText, privacy: .public)")
         deviceMenuItem.title = errorText == "Keyboard offline" ? "Keyboard offline" : "No keyboard found among paired devices"
         refreshSampledLine()
         writeFailureSnapshot(lastError: errorText, sampledAt: now)
@@ -339,6 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastSampledAt = now
         isCharging = false
         refreshStatusItemIcon()
+        Self.logger.error("Sample failed: \(errorText, privacy: .public)")
         deviceMenuItem.title = menuErrorTitle(for: errorText)
         refreshSampledLine()
         writeFailureSnapshot(lastError: errorText, sampledAt: now)
@@ -418,11 +447,115 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         formatter.unitsStyle = .full
         lastSampledMenuItem.title = "Last sampled \(formatter.localizedString(for: t, relativeTo: now))"
     }
+
+    // MARK: - Show Logs
+
+    @objc private func handleShowLogs(_ sender: NSMenuItem) {
+        Task.detached(priority: .userInitiated) {
+            await Self.dumpAndOpenLogs()
+        }
+    }
+
+    private static func dumpAndOpenLogs() async {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let logURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("BoltBattery-\(timestamp).log")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+        process.arguments = [
+            "show",
+            "--predicate", #"subsystem == "industries.stark.boltbattery""#,
+            "--last", "6h",
+            "--info",
+            "--debug",
+            "--style", "compact"
+        ]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        let body: Data
+        do {
+            try process.run()
+            body = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+        } catch {
+            Self.logger.error("Failed to spawn /usr/bin/log: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+
+        let header = """
+        === Bolt Battery logs ===
+        Subsystem: industries.stark.boltbattery
+        Window:    last 6h (compact, includes info/debug)
+
+
+        """
+        var output = header.data(using: .utf8) ?? Data()
+        if body.isEmpty {
+            output.append("(no entries in this window — interact with the menu / wait for next sample, then re-open Show Logs)\n".data(using: .utf8) ?? Data())
+        } else {
+            output.append(body)
+        }
+        do {
+            try output.write(to: logURL, options: .atomic)
+        } catch {
+            Self.logger.error("Failed to write log file: \(error.localizedDescription, privacy: .public)")
+            return
+        }
+
+        await MainActor.run {
+            NSWorkspace.shared.open(logURL)
+        }
+    }
+
+    // MARK: - Open at Login
+
+    @objc private func handleToggleOpenAtLogin(_ sender: NSMenuItem) {
+        let service = SMAppService.mainApp
+        do {
+            switch service.status {
+            case .enabled:
+                try service.unregister()
+                Self.logger.notice("Login item unregistered")
+            case .requiresApproval:
+                openLoginItemsSettings()
+            default:
+                try service.register()
+                Self.logger.notice("Login item registered, status=\(String(describing: service.status), privacy: .public)")
+                if service.status == .requiresApproval {
+                    openLoginItemsSettings()
+                }
+            }
+        } catch {
+            Self.logger.error("Login item toggle failed: \(error.localizedDescription, privacy: .public)")
+        }
+        refreshOpenAtLoginState()
+    }
+
+    private func openLoginItemsSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func refreshOpenAtLoginState() {
+        guard let item = openAtLoginMenuItem else { return }
+        let status = SMAppService.mainApp.status
+        item.state = status == .enabled ? .on : .off
+        switch status {
+        case .requiresApproval:
+            item.title = "Open at Login (Approve in Settings…)"
+        default:
+            item.title = "Open at Login"
+        }
+    }
 }
 
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         refreshSampledLine()
+        refreshOpenAtLoginState()
         requestSample()
     }
 }
