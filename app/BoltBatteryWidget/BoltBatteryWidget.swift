@@ -113,31 +113,31 @@ private struct BatteryRing: View {
     private let lineWidth: CGFloat = 6.5
 
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.secondary.opacity(0.22), lineWidth: lineWidth)
-            Circle()
-                .trim(from: 0, to: ringFraction)
-                .stroke(
-                    ringColor,
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-
-            Image(systemName: glyphSymbolName)
-                .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(.primary)
-
-            if isCharging {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.yellow)
-                    .padding(2)
-                    .background(
-                        Circle().fill(Color(nsColor: .windowBackgroundColor))
+        GeometryReader { geo in
+            let radius = min(geo.size.width, geo.size.height) / 2
+            ZStack {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.22), lineWidth: lineWidth)
+                Circle()
+                    .trim(from: 0, to: ringFraction)
+                    .stroke(
+                        ringColor,
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
-                    .offset(x: 13, y: 13)
+                    .rotationEffect(.degrees(-90))
+
+                Image(systemName: glyphSymbolName)
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundStyle(.primary)
+
+                if isCharging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .offset(y: -radius)
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
     }
 

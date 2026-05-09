@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isSampling = false
     private var needsSampleAfterCurrent = false
     private var eventSampleTask: Task<Void, Never>?
+    private var isCharging = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -102,16 +103,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.title = ""
         button.imagePosition = .imageOnly
         button.toolTip = "Bolt Battery"
-
-        guard let image = NSImage(named: "MenuBarBolt") else {
-            NSLog("MenuBarBolt image asset not found")
-            return
-        }
-
-        image.isTemplate = true
-        image.size = NSSize(width: 20, height: 20)
         button.imageScaling = .scaleProportionallyDown
-        button.image = image
+        refreshStatusItemIcon()
+    }
+
+    private func refreshStatusItemIcon() {
+        guard let button = statusItem.button else { return }
+        button.image = makeMenuBarImage(charging: isCharging)
+    }
+
+    private func makeMenuBarImage(charging: Bool) -> NSImage? {
+        guard let logo = NSImage(named: "MenuBarBolt") else {
+            NSLog("MenuBarBolt image asset not found")
+            return nil
+        }
+        let size = NSSize(width: 20, height: 20)
+        let composed = NSImage(size: size, flipped: false) { rect in
+            logo.draw(in: rect)
+            guard charging else { return true }
+
+            let boltConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .bold)
+            guard let bolt = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(boltConfig) else { return true }
+            let boltSize = bolt.size
+            let inset: CGFloat = 0
+            let boltRect = NSRect(
+                x: rect.maxX - boltSize.width - inset,
+                y: rect.minY + inset,
+                width: boltSize.width,
+                height: boltSize.height
+            )
+            bolt.draw(in: boltRect)
+            return true
+        }
+        composed.isTemplate = true
+        return composed
     }
 
     private func requestSample() {
@@ -246,6 +272,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentPollInterval = Self.chargingPollStates.contains(battery.chargingState) || battery.externalPower == true
             ? Self.chargingPollInterval
             : Self.dischargingPollInterval
+        isCharging = battery.chargingState.lowercased().hasPrefix("charging")
+        refreshStatusItemIcon()
 
         var deviceLine = "⌨ \(name) — \(battery.socPercent)%"
         var trailing: [String] = []
@@ -284,6 +312,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentPollInterval = Self.dischargingPollInterval
         lastError = errorText
         lastSampledAt = now
+        isCharging = false
+        refreshStatusItemIcon()
         deviceMenuItem.title = errorText == "Keyboard offline" ? "Keyboard offline" : "No keyboard found among paired devices"
         refreshSampledLine()
         writeFailureSnapshot(lastError: errorText, sampledAt: now)
@@ -295,6 +325,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentPollInterval = Self.dischargingPollInterval
         lastError = errorText
         lastSampledAt = now
+        isCharging = false
+        refreshStatusItemIcon()
         deviceMenuItem.title = menuErrorTitle(for: errorText)
         refreshSampledLine()
         writeFailureSnapshot(lastError: errorText, sampledAt: now)
