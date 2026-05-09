@@ -117,7 +117,7 @@ struct BoltBatteryWidgetEntryView: View {
                     .fixedSize()
                     .position(x: percentCenterX, y: topRowCenterY)
 
-                Text("Charge to start tracking")
+                footerText
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -137,6 +137,25 @@ struct BoltBatteryWidgetEntryView: View {
     private var percentText: String {
         guard let soc = entry.snapshot?.socPercent else { return "—%" }
         return "\(soc)%"
+    }
+
+    private var footerText: Text {
+        guard let lastChargeEndedAt = entry.snapshot?.lastChargeEndedAt,
+              let lastChargeEndedPercent = entry.snapshot?.lastChargeEndedPercent else {
+            return Text("Charge to start tracking")
+        }
+        return Text("Last charged: \(lastChargeEndedPercent)% · \(compactElapsedText(since: lastChargeEndedAt))")
+    }
+
+    private func compactElapsedText(since date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 { return "just now" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes) min ago" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours) hr ago" }
+        let days = hours / 24
+        return days == 1 ? "1 day ago" : "\(days) days ago"
     }
 }
 
@@ -189,7 +208,12 @@ struct BoltBatteryWidget: Widget {
 }
 
 #if DEBUG
-private func mockSnapshot(soc: Int, charging: String) -> BatterySnapshot {
+private func mockSnapshot(
+    soc: Int,
+    charging: String,
+    lastChargeEndedAt: Date? = nil,
+    lastChargeEndedPercent: Int? = nil
+) -> BatterySnapshot {
     BatterySnapshot(
         sampledAt: Date(),
         socPercent: soc,
@@ -197,6 +221,8 @@ private func mockSnapshot(soc: Int, charging: String) -> BatterySnapshot {
         externalPower: charging.hasPrefix("charging"),
         deviceName: "MX Keys S",
         deviceType: "Keyboard",
+        lastChargeEndedAt: lastChargeEndedAt,
+        lastChargeEndedPercent: lastChargeEndedPercent,
         producerVersion: "0.1.0"
     )
 }
@@ -205,7 +231,15 @@ private func mockSnapshot(soc: Int, charging: String) -> BatterySnapshot {
 #Preview("Discharging 75%", as: .systemSmall) {
     BoltBatteryWidget()
 } timeline: {
-    BoltBatteryEntry(date: Date(), snapshot: mockSnapshot(soc: 75, charging: "discharging"))
+    BoltBatteryEntry(
+        date: Date(),
+        snapshot: mockSnapshot(
+            soc: 75,
+            charging: "discharging",
+            lastChargeEndedAt: Date(timeIntervalSinceNow: -6 * 60 * 60),
+            lastChargeEndedPercent: 82
+        )
+    )
 }
 
 @available(macOS 14.0, *)

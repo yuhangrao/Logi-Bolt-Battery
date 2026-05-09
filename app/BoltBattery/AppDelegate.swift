@@ -15,6 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let pollInterval: TimeInterval = 5 * 60
     private static let producerVersion: String =
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
+    private static let chargeEndingStates: Set<String> = [
+        "charging",
+        "charging-slow",
+        "charging-full",
+        "charging-error"
+    ]
 
     private var statusItem: NSStatusItem!
     private var timer: Timer?
@@ -115,6 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshSampledLine()
 
         let previous = SnapshotStore.shared.read()
+        let didEndCharging = (
+            previous.map { Self.chargeEndingStates.contains($0.chargingState) } == true
+            && battery.chargingState == "discharging"
+        )
+        let lastChargeEndedAt = didEndCharging ? now : previous?.lastChargeEndedAt
+        let lastChargeEndedPercent = didEndCharging ? battery.socPercent : previous?.lastChargeEndedPercent
         let snapshot = BatterySnapshot(
             sampledAt: now,
             socPercent: battery.socPercent,
@@ -122,8 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             externalPower: battery.externalPower ?? false,
             deviceName: name,
             deviceType: "Keyboard",
-            lastChargeEndedAt: previous?.lastChargeEndedAt,
-            lastChargeEndedPercent: previous?.lastChargeEndedPercent,
+            lastChargeEndedAt: lastChargeEndedAt,
+            lastChargeEndedPercent: lastChargeEndedPercent,
             lastError: nil,
             producerVersion: Self.producerVersion
         )
