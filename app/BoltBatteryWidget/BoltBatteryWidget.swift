@@ -239,6 +239,8 @@ struct BoltBatteryWidgetEntryView: View {
             let ringCenterX = horizontalGap + gridRingDiameter / 2
             let ringRight = ringCenterX + ringDiameter / 2
             let percentCenterX = (ringRight + geo.size.width) / 2
+            let percentSidePadding: CGFloat = 6
+            let percentBudget = max(0, geo.size.width - ringRight - 2 * percentSidePadding)
             let bottomRowCenterY = 2 * verticalGap + gridRingDiameter * 1.5
             let state = displayState
 
@@ -259,7 +261,7 @@ struct BoltBatteryWidgetEntryView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .fixedSize()
+                    .frame(width: percentBudget)
                     .opacity(state.contentOpacity)
                     .position(x: percentCenterX, y: topRowCenterY)
 

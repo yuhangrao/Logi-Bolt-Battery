@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Constrained the widget percentage readout to preserve side breathing room at `100%`; 2-digit values stay at the original 31pt size, while `100%` scales down slightly instead of touching the ring and widget edge.
+
 ## [0.1.0] — 2026-05-09
 
 First public-but-self-use release. Personal Team signed; no notarized binary
@@ -114,4 +120,5 @@ shipped. Build and install instructions live in the [README](README.md#install).
   switch to system Liquid Glass is gated on Apple resolving the bug in a
   Tahoe stable release.
 
+[Unreleased]: https://github.com/yuhangrao/Logi-Bolt-Battery/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/yuhangrao/Logi-Bolt-Battery/releases/tag/v0.1.0
