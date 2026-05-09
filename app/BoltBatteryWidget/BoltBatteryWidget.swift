@@ -111,8 +111,8 @@ private struct BatteryRing: View {
     let forceGray: Bool
 
     private let lineWidth: CGFloat = 6.5
-    private let boltSize: CGFloat = 10
-    private let boltHaloSize: CGFloat = 13.5
+    private let boltSize: CGFloat = 13
+    private let boltHaloSize: CGFloat = 16
 
     var body: some View {
         GeometryReader { geo in
@@ -129,11 +129,12 @@ private struct BatteryRing: View {
                     .rotationEffect(.degrees(-90))
 
                 if isCharging {
-                    // Bolt-shaped cutout — slightly bigger + heavier so the ring is
-                    // sliced along the bolt's silhouette and tapers to a tip on
-                    // each side, matching the reference battery widget.
+                    // Bolt-shaped cutout — same weight as the visible bolt, only
+                    // a few points bigger, so the halo hugs the silhouette and the
+                    // ring is sliced along the bolt's wing edges. Heavier weights
+                    // here distort the cut shape and break the taper.
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: boltHaloSize, weight: .black))
+                        .font(.system(size: boltHaloSize, weight: .bold))
                         .foregroundStyle(Color.black)
                         .offset(y: -radius)
                         .blendMode(.destinationOut)
