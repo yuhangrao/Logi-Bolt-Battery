@@ -2,6 +2,11 @@ import Foundation
 import IOKit
 import IOKit.hid
 
+public struct UnsolicitedReport: Sendable, Equatable {
+    public let reportID: UInt32
+    public let payload: [UInt8]
+}
+
 public actor BoltClient {
     private let manager: IOHIDManager
     private let device: IOHIDDevice
@@ -9,6 +14,7 @@ public actor BoltClient {
     private let inputBuffer: UnsafeMutablePointer<UInt8>
     private var pending: PendingRequest?
     private var pendingNonce: UInt64 = 0
+    private var unsolicitedReportHandler: (@Sendable (UnsolicitedReport) -> Void)?
     private var closed = false
 
     private struct PendingRequest {
@@ -234,6 +240,10 @@ public actor BoltClient {
         return nil
     }
 
+    public func setUnsolicitedReportHandler(_ handler: (@Sendable (UnsolicitedReport) -> Void)?) {
+        unsolicitedReportHandler = handler
+    }
+
     public func close() {
         guard !closed else { return }
         closed = true
@@ -324,12 +334,23 @@ public actor BoltClient {
         p.continuation.resume(throwing: BoltError.timeout)
     }
 
+    private func notifyUnsolicited(reportID: UInt32, payload: [UInt8]) {
+        unsolicitedReportHandler?(UnsolicitedReport(reportID: reportID, payload: payload))
+    }
+
     fileprivate func handleReport(reportID: UInt32, bytes: [UInt8]) {
         var data = bytes
         if let first = data.first, first == UInt8(reportID & 0xFF) {
             data.removeFirst()
         }
-        guard data.count >= 4, let p = pending else { return }
+        guard data.count >= 4 else {
+            notifyUnsolicited(reportID: reportID, payload: data)
+            return
+        }
+        guard let p = pending else {
+            notifyUnsolicited(reportID: reportID, payload: data)
+            return
+        }
 
         if data[0] == p.deviceIndex,
            data[1] == HIDPP.errorSubID_v1,
@@ -338,7 +359,8 @@ public actor BoltClient {
             p.continuation.resume(returning: data)
             return
         }
-        if data[0] == p.deviceIndex,
+        if data.count >= 5,
+           data[0] == p.deviceIndex,
            data[1] == HIDPP.errorFeatureIndex_v2,
            data[3] == p.featureIndex,
            (data[4] >> 4) == (p.functionAndSwid >> 4) {
@@ -350,7 +372,10 @@ public actor BoltClient {
         guard data[0] == p.deviceIndex,
               data[1] == p.featureIndex,
               (data[2] & 0x0F) == (p.functionAndSwid & 0x0F)
-        else { return }
+        else {
+            notifyUnsolicited(reportID: reportID, payload: data)
+            return
+        }
 
         pending = nil
         p.continuation.resume(returning: data)

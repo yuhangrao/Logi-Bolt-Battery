@@ -12,7 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         app.run()
     }
 
-    private static let pollInterval: TimeInterval = 5 * 60
+    private static let dischargingPollInterval: TimeInterval = 5 * 60
+    private static let chargingPollInterval: TimeInterval = 60
     private static let producerVersion: String =
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
     private static let chargeEndingStates: Set<String> = [
@@ -21,6 +22,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "charging-full",
         "charging-error"
     ]
+    private static let chargingPollStates: Set<String> = [
+        "charging",
+        "charging-slow",
+        "charging-full",
+        "charging-error",
+        "recharging",
+        "almost-full",
+        "full",
+        "slow-recharge"
+    ]
+    private static let batteryFeatureIDs: [UInt16] = [0x1004, 0x1000]
 
     private var statusItem: NSStatusItem!
     private var timer: Timer?
@@ -32,14 +44,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastDeviceName: String = "—"
     private var lastError: String?
 
+    private var client: BoltClient?
+    private var keyboardIndex: UInt8?
+    private var batteryFeatureIndex: UInt8?
+    private var currentPollInterval = AppDelegate.dischargingPollInterval
+    private var isSampling = false
+    private var needsSampleAfterCurrent = false
+    private var eventSampleTask: Task<Void, Never>?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "⌨ —"
         buildMenu()
-        Task { await self.sample() }
-        timer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { _ in
-            Task { @MainActor [weak self] in await self?.sample() }
-        }
+        requestSample()
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(handleWake(_:)),
@@ -49,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func handleWake(_ note: Notification) {
-        Task { @MainActor [weak self] in await self?.sample() }
+        requestSample()
     }
 
     private func buildMenu() {
@@ -78,28 +95,123 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    private func requestSample() {
+        Task { @MainActor [weak self] in await self?.sample() }
+    }
+
+    private func scheduleNextPoll() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: currentPollInterval, repeats: false) { _ in
+            Task { @MainActor [weak self] in self?.requestSample() }
+        }
+    }
+
     private func sample() async {
+        if isSampling {
+            needsSampleAfterCurrent = true
+            return
+        }
+
+        isSampling = true
+        await runSample()
+        isSampling = false
+
+        if needsSampleAfterCurrent {
+            needsSampleAfterCurrent = false
+            requestSample()
+            return
+        }
+
+        scheduleNextPoll()
+    }
+
+    private func runSample() async {
         let client: BoltClient
         do {
-            client = try BoltClient()
+            client = try await currentClient()
         } catch {
             apply(error: error)
             return
         }
 
         do {
-            guard let kbIdx = try await client.discoverKeyboard() else {
-                await client.close()
-                apply(missingKeyboard: ())
-                return
+            let kbIdx: UInt8
+            if let cachedIndex = keyboardIndex {
+                kbIdx = cachedIndex
+            } else {
+                guard let discoveredIndex = try await client.discoverKeyboard() else {
+                    keyboardIndex = nil
+                    batteryFeatureIndex = nil
+                    apply(missingKeyboard: ())
+                    return
+                }
+                keyboardIndex = discoveredIndex
+                kbIdx = discoveredIndex
             }
+
+            await updateBatteryFeatureIndex(client: client, deviceIndex: kbIdx)
             let battery = try await client.getBattery(deviceIndex: kbIdx)
             let name = (try? await client.getDeviceName(deviceIndex: kbIdx)) ?? "Keyboard"
-            await client.close()
             apply(battery: battery, name: name)
         } catch {
-            await client.close()
+            await resetClient()
             apply(error: error)
+        }
+    }
+
+    private func currentClient() async throws -> BoltClient {
+        if let client { return client }
+
+        let newClient = try BoltClient()
+        await newClient.setUnsolicitedReportHandler { [weak self] report in
+            Task { @MainActor in
+                self?.handleUnsolicitedReport(report)
+            }
+        }
+        client = newClient
+        return newClient
+    }
+
+    private func resetClient() async {
+        let oldClient = client
+        client = nil
+        keyboardIndex = nil
+        batteryFeatureIndex = nil
+        await oldClient?.setUnsolicitedReportHandler(nil)
+        await oldClient?.close()
+    }
+
+    private func updateBatteryFeatureIndex(client: BoltClient, deviceIndex: UInt8) async {
+        guard batteryFeatureIndex == nil else { return }
+        for featureID in Self.batteryFeatureIDs {
+            if let index = try? await client.getFeatureIndex(deviceIndex: deviceIndex, featureID: featureID) {
+                batteryFeatureIndex = index
+                return
+            }
+        }
+    }
+
+    private func handleUnsolicitedReport(_ report: UnsolicitedReport) {
+        guard isBatteryRelated(report) else { return }
+        scheduleEventSample()
+    }
+
+    private func isBatteryRelated(_ report: UnsolicitedReport) -> Bool {
+        guard let keyboardIndex,
+              let batteryFeatureIndex,
+              report.payload.count >= 2 else { return false }
+        return report.payload[0] == keyboardIndex && report.payload[1] == batteryFeatureIndex
+    }
+
+    private func scheduleEventSample() {
+        eventSampleTask?.cancel()
+        eventSampleTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 1_500_000_000)
+            } catch {
+                return
+            }
+            self?.requestSample()
         }
     }
 
@@ -109,6 +221,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastDeviceName = name
         let now = Date()
         lastSampledAt = now
+        currentPollInterval = Self.chargingPollStates.contains(battery.chargingState) || battery.externalPower == true
+            ? Self.chargingPollInterval
+            : Self.dischargingPollInterval
 
         statusItem.button?.title = "⌨ \(battery.socPercent)%"
 
@@ -144,6 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(missingKeyboard: ()) {
+        currentPollInterval = Self.dischargingPollInterval
         lastError = "No keyboard found"
         lastSampledAt = Date()
         statusItem.button?.title = "⌨ ?"
@@ -152,6 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(error: Error) {
+        currentPollInterval = Self.dischargingPollInterval
         lastError = String(describing: error)
         lastSampledAt = Date()
         statusItem.button?.title = "⌨ ?"
@@ -178,5 +295,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         refreshSampledLine()
+        requestSample()
     }
 }
