@@ -112,29 +112,31 @@ private struct BatteryRing: View {
 
     private let lineWidth: CGFloat = 6.5
     private let boltSize: CGFloat = 10
-    private let boltGapDiameter: CGFloat = 14
+    private let chargingGapDegrees: Double = 40
 
     var body: some View {
         GeometryReader { geo in
             let radius = min(geo.size.width, geo.size.height) / 2
+            let gapFraction: CGFloat = isCharging ? CGFloat(chargingGapDegrees / 360) : 0
+            let gapHalf = gapFraction / 2
+            let availableArc = 1 - gapFraction
+            let progressEnd = gapHalf + ringFraction * availableArc
+
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.22), lineWidth: lineWidth)
+                    .trim(from: gapHalf, to: 1 - gapHalf)
+                    .stroke(
+                        Color.secondary.opacity(0.22),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
                 Circle()
-                    .trim(from: 0, to: ringFraction)
+                    .trim(from: gapHalf, to: progressEnd)
                     .stroke(
                         ringColor,
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-
-                if isCharging {
-                    Circle()
-                        .fill(Color.black)
-                        .frame(width: boltGapDiameter, height: boltGapDiameter)
-                        .offset(y: -radius)
-                        .blendMode(.destinationOut)
-                }
 
                 Image(systemName: glyphSymbolName)
                     .font(.system(size: 24, weight: .regular))
@@ -147,7 +149,6 @@ private struct BatteryRing: View {
                         .offset(y: -radius)
                 }
             }
-            .compositingGroup()
             .frame(width: geo.size.width, height: geo.size.height)
         }
     }
