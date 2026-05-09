@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] — 2026-05-09
 
-First public-but-self-use release. Personal Team signed; no notarized binary
-shipped. Build and install instructions live in the [README](README.md#install).
+First 0.1.0 package. Personal Team signed; no notarized binary shipped.
+Build and install instructions live in the [README](README.md#install).
 
 ### Added
 
@@ -106,8 +106,8 @@ shipped. Build and install instructions live in the [README](README.md#install).
   named `BoltBattery` so existing pbxproj references stay stable.
 - **Documentation.** `docs/architecture.md`, `docs/development-plan.md`,
   `docs/open-decisions.md`, plus a README **Install** section covering the
-  Personal Team self-build flow, widget add-to-Notification-Center, login
-  item enablement, and log inspection.
+  Personal Team packaging flow, widget add-to-Notification-Center, login item
+  enablement, and log inspection.
 
 ### Known limitations
 

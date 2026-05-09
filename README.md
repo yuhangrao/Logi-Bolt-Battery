@@ -82,7 +82,7 @@ Implementation is broken into 10 main steps with 4 follow-up sub-steps. **Steps 
 
 ## Install
 
-Personal Team self-build, self-use. The repo does not ship a binary — the Logi Bolt receiver pairing is per-machine and Personal Team signing means a binary built on one Mac would still need to be re-signed for another, so it is simpler to build from source on the machine you want to run it on.
+The app is packaged with a Personal Team Apple Development signature. Build artifacts can be copied directly to `/Applications`; when present, `dist/Bolt Battery.app` is the app bundle and `dist/Bolt-Battery-0.1.0.dmg` is the drag-to-Applications disk image.
 
 ### One-time setup
 
@@ -90,18 +90,36 @@ Personal Team self-build, self-use. The repo does not ship a binary — the Logi
 2. `brew install xcodegen`.
 3. If you fork into your own Apple ID: change `DEVELOPMENT_TEAM` in `app/project.yml` to your 10-character team ID, replace every occurrence of the App Group `YOUR_TEAM_ID.industries.stark.boltbattery` (project YAML, entitlements, the constants in `app/Shared/BatterySnapshot.swift`) with `<YOUR_TEAMID>.industries.stark.boltbattery` (or any reverse-DNS you prefer prefixed with your team ID — macOS App Groups must start with the team ID), then re-run `xcodegen generate`.
 
-### Build and copy the .app
+### Build package artifacts
 
 ```bash
 cd app
 xcodegen generate
 xcodebuild -scheme BoltBattery -configuration Release \
   -derivedDataPath /tmp/boltbat-build build
-cp -R "/tmp/boltbat-build/Build/Products/Release/Bolt Battery.app" /Applications/
+cd ..
+mkdir -p dist
+rm -rf "dist/Bolt Battery.app"
+cp -R "/tmp/boltbat-build/Build/Products/Release/Bolt Battery.app" "dist/Bolt Battery.app"
+rm -rf /tmp/boltbat-dmg
+mkdir -p "/tmp/boltbat-dmg/Bolt Battery"
+cp -R "dist/Bolt Battery.app" "/tmp/boltbat-dmg/Bolt Battery/Bolt Battery.app"
+ln -s /Applications "/tmp/boltbat-dmg/Bolt Battery/Applications"
+hdiutil create -volname "Bolt Battery" \
+  -srcfolder "/tmp/boltbat-dmg/Bolt Battery" \
+  -ov -format UDZO "dist/Bolt-Battery-0.1.0.dmg"
+```
+
+The build emits a `Bolt Battery.app` (with a literal space — the `PRODUCT_NAME` is set that way in `app/project.yml` so Finder, Spotlight, Login Items, and the application menu all show "Bolt Battery") signed with the Personal Team's Apple Development certificate. `dist/Bolt Battery.app` can be copied directly to `/Applications`, while `dist/Bolt-Battery-0.1.0.dmg` opens as a drag-to-Applications disk image.
+
+### Install
+
+```bash
+cp -R "dist/Bolt Battery.app" /Applications/
 open "/Applications/Bolt Battery.app"
 ```
 
-The build emits a `Bolt Battery.app` (with a literal space — the `PRODUCT_NAME` is set that way in `app/project.yml` so Finder, Spotlight, Login Items, and the application menu all show "Bolt Battery") signed with the Personal Team's Apple Development certificate. Copying it from a local build path to `/Applications` avoids Gatekeeper's quarantine flag (which only attaches to downloaded files), so first launch is silent. After `open` you should see the Logi Bolt logo in the menu bar within a couple of seconds — the app samples the receiver immediately on launch.
+After `open` you should see the Logi Bolt logo in the menu bar within a couple of seconds — the app samples the receiver immediately on launch.
 
 ### Add the widget
 

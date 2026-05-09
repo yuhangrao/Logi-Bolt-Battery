@@ -26,3 +26,6 @@ Packages/
 # Local widget runtime state (battery history, last-charge cache)
 state/
 *.local.json
+
+# Local packaging artifacts
+dist/
