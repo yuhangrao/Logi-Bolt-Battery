@@ -104,6 +104,47 @@ private enum WidgetDisplayState {
     }
 }
 
+private struct BoltShape: Shape {
+    // Path drawn as Apple's system battery UI bolt path reference (14×19pt design).
+    // PDF uses Y-up, SwiftUI uses Y-down, so y is flipped to (19 - y).
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width / 14, rect.height / 19)
+        let dx = (rect.width - 14 * s) / 2 + rect.minX
+        let dy = (rect.height - 19 * s) / 2 + rect.minY
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: dx + x * s, y: dy + (19 - y) * s)
+        }
+        var path = Path()
+        path.move(to: p(5.550674, 2.306386))
+        path.addLine(to: p(11.59618, 9.841106))
+        path.addCurve(to: p(11.7912, 10.31092),
+                      control1: p(11.72028, 10.00066),
+                      control2: p(11.7912, 10.14249))
+        path.addCurve(to: p(11.2416, 10.82505),
+                      control1: p(11.7912, 10.61231),
+                      control2: p(11.55186, 10.82505))
+        path.addLine(to: p(7.509702, 10.82505))
+        path.addLine(to: p(9.468729, 16.14368))
+        path.addCurve(to: p(8.449326, 16.69327),
+                      control1: p(9.761253, 16.90601),
+                      control2: p(8.954595, 17.32264))
+        path.addLine(to: p(2.394957, 9.158549))
+        path.addCurve(to: p(2.208805, 8.697601),
+                      control1: p(2.270855, 9.007854),
+                      control2: p(2.208805, 8.85716))
+        path.addCurve(to: p(2.749532, 8.174603),
+                      control1: p(2.208805, 8.396212),
+                      control2: p(2.439278, 8.174603))
+        path.addLine(to: p(6.481434, 8.174603))
+        path.addLine(to: p(4.522407, 2.864842))
+        path.addCurve(to: p(5.550674, 2.306386),
+                      control1: p(4.238747, 2.093641),
+                      control2: p(5.036541, 1.677015))
+        path.closeSubpath()
+        return path
+    }
+}
+
 private struct BatteryRing: View {
     let socPercent: Int?
     let isCharging: Bool
@@ -111,8 +152,12 @@ private struct BatteryRing: View {
     let forceGray: Bool
 
     private let lineWidth: CGFloat = 6.5
-    private let boltSize: CGFloat = 13
-    private let boltHaloSize: CGFloat = 16
+    private let boltDesignWidth: CGFloat = 14
+    private let boltDesignHeight: CGFloat = 19
+    // Apple's mask is the same path stroked at lineWidth 4 (2pt outset on each
+    // side). Combined with the fill, this yields a bolt + uniform 2pt halo —
+    // exactly what bolt-shaped knockout does in the system framework.
+    private let maskStrokeWidth: CGFloat = 4
 
     var body: some View {
         GeometryReader { geo in
@@ -129,15 +174,13 @@ private struct BatteryRing: View {
                     .rotationEffect(.degrees(-90))
 
                 if isCharging {
-                    // Bolt-shaped cutout — same weight as the visible bolt, only
-                    // a few points bigger, so the halo hugs the silhouette and the
-                    // ring is sliced along the bolt's wing edges. Heavier weights
-                    // here distort the cut shape and break the taper.
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: boltHaloSize, weight: .bold))
-                        .foregroundStyle(Color.black)
-                        .offset(y: -radius)
-                        .blendMode(.destinationOut)
+                    ZStack {
+                        BoltShape().fill(Color.black)
+                        BoltShape().stroke(Color.black, lineWidth: maskStrokeWidth)
+                    }
+                    .frame(width: boltDesignWidth, height: boltDesignHeight)
+                    .offset(y: -radius)
+                    .blendMode(.destinationOut)
                 }
 
                 Image(systemName: glyphSymbolName)
@@ -145,9 +188,9 @@ private struct BatteryRing: View {
                     .foregroundStyle(.primary)
 
                 if isCharging {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: boltSize, weight: .bold))
-                        .foregroundStyle(boltColor)
+                    BoltShape()
+                        .fill(boltColor)
+                        .frame(width: boltDesignWidth, height: boltDesignHeight)
                         .offset(y: -radius)
                 }
             }
