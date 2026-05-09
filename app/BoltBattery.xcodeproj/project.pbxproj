@@ -18,6 +18,7 @@
 		8991AA9EDFB7D083B156D567 /* BoltBatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833573A503A1749F102FA792 /* BoltBatteryWidget.swift */; };
 		8DA0AA5B311E790B86439E79 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8ABB511BCD6F95A6EF842BDF /* SwiftUI.framework */; };
 		BB39C2D7FCED0A2D18323E8E /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C91C7574795AC4D5E5BB718 /* WidgetKit.framework */; };
+		CC974F7F711F68FE69AE68B8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EB784AFA8503ADDDB752CA49 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +57,7 @@
 		C1DCE7769B89A46B30A4A364 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D04D525313CFC3179EF298DF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		DC5FE1DD4EFB8C3A72FAE241 /* BoltBatteryWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BoltBatteryWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EB784AFA8503ADDDB752CA49 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EBE9BE04B5DB8A9F7572C934 /* BoltBatteryWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoltBatteryWidget.entitlements; sourceTree = "<group>"; };
 		F53ACE4977571FAA8F832E50 /* BatterySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatterySnapshot.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -114,6 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				D04D525313CFC3179EF298DF /* AppDelegate.swift */,
+				EB784AFA8503ADDDB752CA49 /* Assets.xcassets */,
 				42B6E8B7A7E021362E127A89 /* BoltBattery.entitlements */,
 				C1DCE7769B89A46B30A4A364 /* Info.plist */,
 			);
@@ -157,6 +160,7 @@
 			buildConfigurationList = 8A0ACEB088C6573240101038 /* Build configuration list for PBXNativeTarget "BoltBattery" */;
 			buildPhases = (
 				3E103C1B9CDC21A24D71DB51 /* Sources */,
+				53BE9ECF323AFCBCA085B8E4 /* Resources */,
 				0FED071DFA676AD9739AA62E /* Frameworks */,
 				F3B4B629B9735E239763E522 /* Embed Foundation Extensions */,
 			);
@@ -232,6 +236,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		53BE9ECF323AFCBCA085B8E4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CC974F7F711F68FE69AE68B8 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		3E103C1B9CDC21A24D71DB51 /* Sources */ = {

@@ -24,14 +24,18 @@ targets:
     platform: macOS
     deploymentTarget: "13.0"
     sources:
-      - BoltBattery
+      - path: BoltBattery
+        excludes:
+          - Assets.xcassets
       - Shared
+      - BoltBattery/Assets.xcassets
     info:
       path: BoltBattery/Info.plist
       properties:
         LSUIElement: YES
         CFBundleName: BoltBattery
         CFBundleDisplayName: Bolt Battery
+        CFBundleIconName: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSHumanReadableCopyright: ""
@@ -45,6 +49,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: industries.stark.boltbattery
         PRODUCT_NAME: BoltBattery
         COMBINE_HIDPI_IMAGES: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: BoltHIDPP
         product: BoltHIDPP

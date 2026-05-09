@@ -55,8 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventSampleTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "⌨ —"
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        configureStatusItemIcon()
         buildMenu()
         requestSample()
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -95,6 +95,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quit)
 
         statusItem.menu = menu
+    }
+
+    private func configureStatusItemIcon() {
+        guard let button = statusItem.button else { return }
+        button.title = ""
+        button.imagePosition = .imageOnly
+        button.toolTip = "Bolt Battery"
+
+        guard let image = NSImage(named: "MenuBarBolt") else {
+            NSLog("MenuBarBolt image asset not found")
+            return
+        }
+
+        image.isTemplate = true
+        image.size = NSSize(width: 20, height: 20)
+        button.imageScaling = .scaleProportionallyDown
+        button.image = image
     }
 
     private func requestSample() {
@@ -230,8 +247,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ? Self.chargingPollInterval
             : Self.dischargingPollInterval
 
-        statusItem.button?.title = "⌨ \(battery.socPercent)%"
-
         var deviceLine = "⌨ \(name) — \(battery.socPercent)%"
         var trailing: [String] = []
         if !battery.chargingState.isEmpty { trailing.append(battery.chargingState) }
@@ -269,7 +284,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentPollInterval = Self.dischargingPollInterval
         lastError = errorText
         lastSampledAt = now
-        statusItem.button?.title = "⌨ ?"
         deviceMenuItem.title = errorText == "Keyboard offline" ? "Keyboard offline" : "No keyboard found among paired devices"
         refreshSampledLine()
         writeFailureSnapshot(lastError: errorText, sampledAt: now)
@@ -281,7 +295,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentPollInterval = Self.dischargingPollInterval
         lastError = errorText
         lastSampledAt = now
-        statusItem.button?.title = "⌨ ?"
         deviceMenuItem.title = menuErrorTitle(for: errorText)
         refreshSampledLine()
         writeFailureSnapshot(lastError: errorText, sampledAt: now)
