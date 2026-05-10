@@ -63,8 +63,9 @@ private enum WidgetDisplayState {
     case missing
     case stale(BatterySnapshot)
     case receiverDisconnected(BatterySnapshot)
+    case reconnecting(BatterySnapshot)
     case keyboardOffline(BatterySnapshot)
-    case sampleError(BatterySnapshot, String)
+    case sampleError(BatterySnapshot)
     case normal(BatterySnapshot)
 
     var snapshot: BatterySnapshot? {
@@ -73,8 +74,9 @@ private enum WidgetDisplayState {
             return nil
         case .stale(let snapshot),
              .receiverDisconnected(let snapshot),
+             .reconnecting(let snapshot),
              .keyboardOffline(let snapshot),
-             .sampleError(let snapshot, _),
+             .sampleError(let snapshot),
              .normal(let snapshot):
             return snapshot
         }
@@ -82,7 +84,7 @@ private enum WidgetDisplayState {
 
     var forcesGrayRing: Bool {
         switch self {
-        case .missing, .receiverDisconnected, .keyboardOffline, .sampleError:
+        case .missing, .receiverDisconnected, .reconnecting, .keyboardOffline, .sampleError:
             return true
         case .stale, .normal:
             return false
@@ -282,17 +284,18 @@ struct BoltBatteryWidgetEntryView: View {
         if entry.date.timeIntervalSince(snapshot.sampledAt) > WidgetTiming.staleInterval {
             return .stale(snapshot)
         }
-        guard let lastError = snapshot.lastError else { return .normal(snapshot) }
-        if lastError == "Receiver disconnected" {
+        switch snapshot.status {
+        case .connected:
+            return .normal(snapshot)
+        case .receiverDisconnected:
             return .receiverDisconnected(snapshot)
-        }
-        if lastError == "Keyboard offline" {
+        case .reconnecting:
+            return .reconnecting(snapshot)
+        case .keyboardNoResponse, .keyboardOffline:
             return .keyboardOffline(snapshot)
+        case .hidppError, .error:
+            return .sampleError(snapshot)
         }
-        if lastError.hasPrefix("Error:") {
-            return .sampleError(snapshot, lastError)
-        }
-        return .normal(snapshot)
     }
 
     private func percentText(for state: WidgetDisplayState) -> String {
@@ -308,16 +311,29 @@ struct BoltBatteryWidgetEntryView: View {
             return Text("Updated \(compactElapsedText(since: snapshot.sampledAt, relativeTo: entry.date))")
         case .receiverDisconnected:
             return Text("Receiver disconnected")
+        case .reconnecting:
+            return Text("Reconnecting…")
         case .keyboardOffline:
             return Text("Keyboard offline")
-        case .sampleError(_, let errorText):
-            return Text(errorText)
+        case .sampleError(let snapshot):
+            return Text(errorText(for: snapshot))
         case .normal(let snapshot):
             guard let lastChargeEndedAt = snapshot.lastChargeEndedAt,
                   let lastChargeEndedPercent = snapshot.lastChargeEndedPercent else {
                 return Text("Charge to start tracking")
             }
             return Text("Last charged: \(lastChargeEndedPercent)% · \(compactElapsedText(since: lastChargeEndedAt, relativeTo: entry.date))")
+        }
+    }
+
+    private func errorText(for snapshot: BatterySnapshot) -> String {
+        switch snapshot.status {
+        case .hidppError:
+            return String(format: "Error: 0x%02X", snapshot.statusCode ?? 0)
+        case .error:
+            return "Error"
+        default:
+            return "Error"
         }
     }
 
@@ -388,7 +404,8 @@ private func mockSnapshot(
     sampledAt: Date = Date(),
     lastChargeEndedAt: Date? = nil,
     lastChargeEndedPercent: Int? = nil,
-    lastError: String? = nil
+    status: BatterySnapshotStatus = .connected,
+    statusCode: UInt8? = nil
 ) -> BatterySnapshot {
     BatterySnapshot(
         sampledAt: sampledAt,
@@ -399,7 +416,8 @@ private func mockSnapshot(
         deviceType: "Keyboard",
         lastChargeEndedAt: lastChargeEndedAt,
         lastChargeEndedPercent: lastChargeEndedPercent,
-        lastError: lastError,
+        status: status,
+        statusCode: statusCode,
         producerVersion: "0.1.0"
     )
 }
@@ -464,7 +482,7 @@ private func mockSnapshot(
 } timeline: {
     BoltBatteryEntry(
         date: Date(),
-        snapshot: mockSnapshot(soc: 75, charging: "discharging", lastError: "Receiver disconnected")
+        snapshot: mockSnapshot(soc: 75, charging: "discharging", status: .receiverDisconnected)
     )
 }
 
@@ -474,7 +492,7 @@ private func mockSnapshot(
 } timeline: {
     BoltBatteryEntry(
         date: Date(),
-        snapshot: mockSnapshot(soc: 75, charging: "discharging", lastError: "Keyboard offline")
+        snapshot: mockSnapshot(soc: 75, charging: "discharging", status: .keyboardOffline)
     )
 }
 
@@ -484,7 +502,7 @@ private func mockSnapshot(
 } timeline: {
     BoltBatteryEntry(
         date: Date(),
-        snapshot: mockSnapshot(soc: 75, charging: "discharging", lastError: "Error: 0x08")
+        snapshot: mockSnapshot(soc: 75, charging: "discharging", status: .hidppError, statusCode: 0x08)
     )
 }
 #endif

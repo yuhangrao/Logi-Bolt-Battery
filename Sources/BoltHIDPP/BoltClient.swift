@@ -5,6 +5,38 @@ import IOKit.hid
 public struct UnsolicitedReport: Sendable, Equatable {
     public let reportID: UInt32
     public let payload: [UInt8]
+
+    public var receiverNotificationSubID: UInt8? {
+        guard reportID == UInt32(HIDPP.reportShort), payload.count >= 3 else { return nil }
+        let subID = payload[1]
+        switch subID {
+        case HIDPP.notificationDeviceDisconnected,
+             HIDPP.notificationConnectionStatus:
+            return subID
+        case HIDPP.notificationDeviceConnected:
+            return payload.count >= 4 ? subID : nil
+        default:
+            return nil
+        }
+    }
+
+    public var indicatesConnectionLoss: Bool {
+        guard let subID = receiverNotificationSubID else { return false }
+        if subID == HIDPP.notificationDeviceDisconnected {
+            return true
+        }
+        if subID == HIDPP.notificationConnectionStatus {
+            return payload.count > 2 && payload[2] == 0x01
+        }
+        return subID == HIDPP.notificationDeviceConnected && payload.count > 3 && (payload[3] & 0x40) != 0
+    }
+
+    public func matchesFeatureReport(deviceIndex: UInt8, featureIndex: UInt8) -> Bool {
+        reportID == UInt32(HIDPP.reportLong)
+            && payload.count >= 3
+            && payload[0] == deviceIndex
+            && payload[1] == featureIndex
+    }
 }
 
 public actor BoltClient {

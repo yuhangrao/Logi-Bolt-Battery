@@ -5,6 +5,16 @@ public enum AppGroup {
     public static let snapshotKey = "snapshot"
 }
 
+public enum BatterySnapshotStatus: String, Codable, Equatable, Sendable {
+    case connected
+    case receiverDisconnected
+    case reconnecting
+    case keyboardNoResponse
+    case keyboardOffline
+    case hidppError
+    case error
+}
+
 public struct BatterySnapshot: Codable, Equatable, Sendable {
     public let sampledAt: Date
     public let socPercent: Int
@@ -14,7 +24,8 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
     public let deviceType: String
     public let lastChargeEndedAt: Date?
     public let lastChargeEndedPercent: Int?
-    public let lastError: String?
+    public let status: BatterySnapshotStatus
+    public let statusCode: UInt8?
     public let producerVersion: String
 
     public init(
@@ -26,7 +37,8 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
         deviceType: String,
         lastChargeEndedAt: Date? = nil,
         lastChargeEndedPercent: Int? = nil,
-        lastError: String? = nil,
+        status: BatterySnapshotStatus = .connected,
+        statusCode: UInt8? = nil,
         producerVersion: String
     ) {
         self.sampledAt = sampledAt
@@ -37,7 +49,8 @@ public struct BatterySnapshot: Codable, Equatable, Sendable {
         self.deviceType = deviceType
         self.lastChargeEndedAt = lastChargeEndedAt
         self.lastChargeEndedPercent = lastChargeEndedPercent
-        self.lastError = lastError
+        self.status = status
+        self.statusCode = statusCode
         self.producerVersion = producerVersion
     }
 }

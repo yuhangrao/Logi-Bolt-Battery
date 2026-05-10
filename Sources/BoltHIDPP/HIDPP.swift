@@ -18,6 +18,11 @@ enum HIDPP {
     static let featureDeviceName: UInt16 = 0x0005
     static let featureBatteryLegacy: UInt16 = 0x1000
     static let featureBatteryUnified: UInt16 = 0x1004
+    static let featureWirelessDeviceStatus: UInt16 = 0x1D4B
+
+    static let notificationDeviceDisconnected: UInt8 = 0x40
+    static let notificationDeviceConnected: UInt8 = 0x41
+    static let notificationConnectionStatus: UInt8 = 0x42
 
     static let v1ErrorNames: [UInt8: String] = [
         0x01: "InvalidSubID",

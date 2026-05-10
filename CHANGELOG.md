@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Refresh on HID++ wireless-status / receiver connection reports and Bolt receiver USB-C presence changes, so keyboard wake/reconnect/disconnect and receiver unplug/replug events can update the widget without waiting for the polling interval; receiver replug now uses a short `Reconnecting…` grace window plus background retry before settling on keyboard offline.
+- Added a menu `Status:` row for current connected/reconnecting/offline/receiver/error state while keeping the first row pinned to the last successful battery reading.
+
 ### Fixed
 
+- `Last sampled` in the menu now advances only after a successful battery read; failed samples still refresh widget degraded state but no longer make the menu claim a fresh successful sample.
 - Constrained the widget percentage readout to preserve side breathing room at `100%`; 2-digit values stay at the original 31pt size, while `100%` scales down slightly instead of touching the ring and widget edge.
 
 ## [0.1.0] — 2026-05-09
@@ -61,7 +67,7 @@ Build and install instructions live in the [README](README.md#install).
   `Charge to start tracking` until the first `charging* → discharging` event
   is observed.
 - **Degraded states.** Failed samples preserve the last battery / device
-  fields, update `sampledAt`, set `lastError`, and reload widget timelines.
+  fields, update `sampledAt`, set structured `status` / `statusCode`, and reload widget timelines.
   The widget renders `Open Bolt Battery to start` (no snapshot),
   `Updated <X> ago` (>30 min stale, ring half-transparent),
   `Receiver disconnected` (IOKit / set-report failures, ring gray),

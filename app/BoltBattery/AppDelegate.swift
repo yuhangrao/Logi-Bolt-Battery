@@ -36,27 +36,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "slow-recharge"
     ]
     private static let batteryFeatureIDs: [UInt16] = [0x1004, 0x1000]
+    private static let wirelessDeviceStatusFeatureID: UInt16 = 0x1D4B
+    private static let receiverReconnectGraceDuration: TimeInterval = 4
+    private static let receiverReconnectRetryDuration: TimeInterval = 45
     private static let keyboardOfflineThreshold = 6
 
     private var statusItem: NSStatusItem!
     private var timer: Timer?
     private var deviceMenuItem: NSMenuItem!
+    private var statusMenuItem: NSMenuItem!
     private var lastSampledMenuItem: NSMenuItem!
     private var openAtLoginMenuItem: NSMenuItem!
 
     private var lastSampledAt: Date?
     private var lastSOC: Int?
     private var lastDeviceName: String = "—"
-    private var lastError: String?
+    private var currentSnapshotStatus: BatterySnapshotStatus = .connected
 
     private var client: BoltClient?
+    private var receiverMonitor: BoltReceiverMonitor?
     private var keyboardIndex: UInt8?
     private var batteryFeatureIndex: UInt8?
+    private var wirelessStatusFeatureIndex: UInt8?
     private var currentPollInterval = AppDelegate.dischargingPollInterval
     private var keyboardNoResponseCount = 0
     private var isSampling = false
     private var needsSampleAfterCurrent = false
     private var eventSampleTask: Task<Void, Never>?
+    private var receiverPresenceTask: Task<Void, Never>?
+    private var receiverReconnectGraceUntil: Date?
+    private var receiverReconnectRetryUntil: Date?
+    private var receiverRemovalObserved = false
+    private var forceKeyboardOfflineOnNextFailure = false
     private var isCharging = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -64,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         configureStatusItemIcon()
         buildMenu()
+        startReceiverMonitor()
         requestSample()
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -77,14 +89,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestSample()
     }
 
+    private func startReceiverMonitor() {
+        do {
+            receiverMonitor = try BoltReceiverMonitor { [weak self] event in
+                Task { @MainActor in
+                    await self?.handleReceiverPresenceEvent(event)
+                }
+            }
+        } catch {
+            Self.logger.error("Receiver monitor failed to start: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func handleReceiverPresenceEvent(_ event: BoltReceiverPresenceEvent) async {
+        switch event {
+        case .matched:
+            Self.logger.notice("Bolt receiver matched")
+            scheduleReceiverPresenceReconciliation(delay: 1.0)
+        case .removed:
+            Self.logger.notice("Bolt receiver removed")
+            receiverRemovalObserved = true
+            scheduleReceiverPresenceReconciliation(delay: 0.3)
+        }
+    }
+
+    private func scheduleReceiverPresenceReconciliation(delay: TimeInterval) {
+        receiverPresenceTask?.cancel()
+        receiverPresenceTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                return
+            }
+            await self?.reconcileReceiverPresence()
+        }
+    }
+
+    private func reconcileReceiverPresence() async {
+        if BoltReceiverMonitor.isReceiverPresent() {
+            if isSampling {
+                scheduleReceiverPresenceReconciliation(delay: 1.0)
+                return
+            }
+            if currentSnapshotStatus == .connected && lastSampledAt != nil && !receiverRemovalObserved {
+                return
+            }
+            receiverRemovalObserved = false
+            let now = Date()
+            receiverReconnectGraceUntil = now.addingTimeInterval(Self.receiverReconnectGraceDuration)
+            receiverReconnectRetryUntil = now.addingTimeInterval(Self.receiverReconnectRetryDuration)
+            currentSnapshotStatus = .reconnecting
+            setCurrentStatus(statusText(for: .reconnecting))
+            writeFailureSnapshot(status: .reconnecting, sampledAt: now)
+            if client != nil { await resetClient() }
+            scheduleEventSample(delay: 0.75)
+        } else {
+            receiverReconnectGraceUntil = nil
+            receiverReconnectRetryUntil = nil
+            eventSampleTask?.cancel()
+            await resetClient()
+            apply(error: BoltError.noMatchingDevice, keyboardNoResponse: false)
+        }
+    }
+
     private func buildMenu() {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
 
-        deviceMenuItem = NSMenuItem(title: "Sampling…", action: nil, keyEquivalent: "")
+        deviceMenuItem = NSMenuItem(title: "No battery sample yet", action: nil, keyEquivalent: "")
         deviceMenuItem.isEnabled = false
         menu.addItem(deviceMenuItem)
+
+        statusMenuItem = NSMenuItem(title: "Status: sampling…", action: nil, keyEquivalent: "")
+        statusMenuItem.isEnabled = false
+        menu.addItem(statusMenuItem)
 
         lastSampledMenuItem = NSMenuItem(title: "Last sampled: never", action: nil, keyEquivalent: "")
         lastSampledMenuItem.isEnabled = false
@@ -134,6 +213,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshStatusItemIcon() {
         guard let button = statusItem.button else { return }
         button.image = makeMenuBarImage(charging: isCharging)
+    }
+
+    private func setCurrentStatus(_ status: String, tooltip: String? = nil) {
+        statusMenuItem.title = "Status: \(status)"
+        statusItem.button?.toolTip = tooltip ?? "Bolt Battery — \(status)"
+    }
+
+    private var isInReceiverReconnectGraceWindow: Bool {
+        guard let receiverReconnectGraceUntil else { return false }
+        if Date() < receiverReconnectGraceUntil { return true }
+        self.receiverReconnectGraceUntil = nil
+        return false
+    }
+
+    private var isInReceiverReconnectRetryWindow: Bool {
+        guard let receiverReconnectRetryUntil else { return false }
+        if Date() < receiverReconnectRetryUntil { return true }
+        self.receiverReconnectRetryUntil = nil
+        return false
     }
 
     private func makeMenuBarImage(charging: Bool) -> NSImage? {
@@ -233,11 +331,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             attemptedKeyboardSample = true
             await updateBatteryFeatureIndex(client: client, deviceIndex: kbIdx)
+            await updateWirelessStatusFeatureIndex(client: client, deviceIndex: kbIdx)
             let battery = try await client.getBattery(deviceIndex: kbIdx)
             let name = (try? await client.getDeviceName(deviceIndex: kbIdx)) ?? "Keyboard"
             apply(battery: battery, name: name)
         } catch {
-            await resetClient()
+            if Self.shouldResetClient(after: error) {
+                await resetClient()
+            }
             apply(error: error, keyboardNoResponse: attemptedKeyboardSample && Self.isKeyboardNoResponse(error))
         }
     }
@@ -260,6 +361,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         client = nil
         keyboardIndex = nil
         batteryFeatureIndex = nil
+        wirelessStatusFeatureIndex = nil
         await oldClient?.setUnsolicitedReportHandler(nil)
         await oldClient?.close()
     }
@@ -274,24 +376,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func updateWirelessStatusFeatureIndex(client: BoltClient, deviceIndex: UInt8) async {
+        guard wirelessStatusFeatureIndex == nil else { return }
+        wirelessStatusFeatureIndex = try? await client.getFeatureIndex(
+            deviceIndex: deviceIndex,
+            featureID: Self.wirelessDeviceStatusFeatureID
+        )
+    }
+
     private func handleUnsolicitedReport(_ report: UnsolicitedReport) {
-        guard isBatteryRelated(report) else { return }
-        Self.logger.debug("Battery-related HID++ report received, scheduling sample")
-        scheduleEventSample()
+        guard let reason = sampleTriggerReason(for: report) else { return }
+        if report.indicatesConnectionLoss {
+            forceKeyboardOfflineOnNextFailure = true
+        }
+        Self.logger.debug("HID++ event \(reason, privacy: .public), reportID=\(report.reportID, privacy: .public), payload=\(Self.hexPayload(report.payload), privacy: .public)")
+        scheduleEventSample(delay: report.indicatesConnectionLoss ? 0.2 : 1.5)
     }
 
-    private func isBatteryRelated(_ report: UnsolicitedReport) -> Bool {
-        guard let keyboardIndex,
-              let batteryFeatureIndex,
-              report.payload.count >= 2 else { return false }
-        return report.payload[0] == keyboardIndex && report.payload[1] == batteryFeatureIndex
+    private func sampleTriggerReason(for report: UnsolicitedReport) -> String? {
+        if let keyboardIndex,
+           let batteryFeatureIndex,
+           report.matchesFeatureReport(deviceIndex: keyboardIndex, featureIndex: batteryFeatureIndex) {
+            return "battery"
+        }
+        if let keyboardIndex,
+           let wirelessStatusFeatureIndex,
+           report.matchesFeatureReport(deviceIndex: keyboardIndex, featureIndex: wirelessStatusFeatureIndex) {
+            return "wireless-status"
+        }
+        if let subID = report.receiverNotificationSubID {
+            if let keyboardIndex, report.payload.first != keyboardIndex { return nil }
+            return String(format: "receiver-notification-0x%02X", subID)
+        }
+        return nil
     }
 
-    private func scheduleEventSample() {
+    private func scheduleEventSample(delay: TimeInterval = 1.5) {
         eventSampleTask?.cancel()
         eventSampleTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 1_500_000_000)
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             } catch {
                 return
             }
@@ -299,9 +423,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private static func hexPayload(_ payload: [UInt8]) -> String {
+        payload.map { String(format: "%02X", $0) }.joined(separator: " ")
+    }
+
     private func apply(battery: BatteryReading, name: String) {
         keyboardNoResponseCount = 0
-        lastError = nil
+        receiverReconnectGraceUntil = nil
+        receiverReconnectRetryUntil = nil
+        receiverRemovalObserved = false
+        forceKeyboardOfflineOnNextFailure = false
+        currentSnapshotStatus = .connected
         lastSOC = battery.socPercent
         lastDeviceName = name
         let now = Date()
@@ -320,6 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if battery.externalPower == true { trailing.append("plugged in") }
         if !trailing.isEmpty { deviceLine += " (\(trailing.joined(separator: ", ")))" }
         deviceMenuItem.title = deviceLine
+        setCurrentStatus("Connected", tooltip: "Bolt Battery — \(deviceLine)")
         refreshSampledLine()
 
         let previous = SnapshotStore.shared.read()
@@ -338,7 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             deviceType: "Keyboard",
             lastChargeEndedAt: lastChargeEndedAt,
             lastChargeEndedPercent: lastChargeEndedPercent,
-            lastError: nil,
+            status: .connected,
             producerVersion: Self.producerVersion
         )
         SnapshotStore.shared.write(snapshot)
@@ -347,51 +480,119 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func apply(missingKeyboard: ()) {
         let now = Date()
-        let errorText = nextKeyboardNoResponseText()
+        if suppressTransientReceiverReconnectFailure(error: nil, keyboardNoResponse: true) {
+            Self.logger.error("Sample failed (missing keyboard) during receiver reconnect window")
+            return
+        }
+        let status = nextKeyboardNoResponseStatus()
+        let errorText = statusText(for: status)
         currentPollInterval = Self.dischargingPollInterval
-        lastError = errorText
-        lastSampledAt = now
+        currentSnapshotStatus = status
         isCharging = false
         refreshStatusItemIcon()
+        setCurrentStatus(errorText)
         Self.logger.error("Sample failed (missing keyboard): \(errorText, privacy: .public)")
-        deviceMenuItem.title = errorText == "Keyboard offline" ? "Keyboard offline" : "No keyboard found among paired devices"
         refreshSampledLine()
-        writeFailureSnapshot(lastError: errorText, sampledAt: now)
+        writeFailureSnapshot(status: status, sampledAt: now)
+        scheduleReceiverReconnectRetryIfNeeded()
     }
 
     private func apply(error: Error, keyboardNoResponse: Bool) {
         let now = Date()
-        let errorText = normalizedErrorText(for: error, keyboardNoResponse: keyboardNoResponse)
+        if suppressTransientReceiverReconnectFailure(error: error, keyboardNoResponse: keyboardNoResponse) {
+            Self.logger.error("Sample failed during receiver reconnect window: \(String(describing: error), privacy: .public)")
+            return
+        }
+        let failure = normalizedFailure(for: error, keyboardNoResponse: keyboardNoResponse)
+        let errorText = statusText(for: failure.status, code: failure.statusCode)
         currentPollInterval = Self.dischargingPollInterval
-        lastError = errorText
-        lastSampledAt = now
+        currentSnapshotStatus = failure.status
         isCharging = false
         refreshStatusItemIcon()
+        setCurrentStatus(errorText)
         Self.logger.error("Sample failed: \(errorText, privacy: .public)")
-        deviceMenuItem.title = menuErrorTitle(for: errorText)
         refreshSampledLine()
-        writeFailureSnapshot(lastError: errorText, sampledAt: now)
+        writeFailureSnapshot(status: failure.status, statusCode: failure.statusCode, sampledAt: now)
+        if keyboardNoResponse { scheduleReceiverReconnectRetryIfNeeded() }
     }
 
-    private func nextKeyboardNoResponseText() -> String {
+    private func suppressTransientReceiverReconnectFailure(error: Error?, keyboardNoResponse: Bool) -> Bool {
+        let receiverTransportError = error.map(Self.isReceiverTransportError) ?? false
+        let receiverStillPresent = receiverTransportError && BoltReceiverMonitor.isReceiverPresent()
+        let shouldSuppressInGrace = keyboardNoResponse || receiverStillPresent
+        if isInReceiverReconnectGraceWindow && shouldSuppressInGrace {
+            keepReceiverReconnecting(retryDelay: 1.0)
+            return true
+        }
+        if isInReceiverReconnectRetryWindow && receiverStillPresent {
+            keepReceiverReconnecting(retryDelay: 3.0)
+            return true
+        }
+        return false
+    }
+
+    private func keepReceiverReconnecting(retryDelay: TimeInterval) {
+        currentPollInterval = Self.dischargingPollInterval
+        currentSnapshotStatus = .reconnecting
+        isCharging = false
+        refreshStatusItemIcon()
+        setCurrentStatus(statusText(for: .reconnecting))
+        refreshSampledLine()
+        writeFailureSnapshot(status: .reconnecting, sampledAt: Date())
+        scheduleEventSample(delay: retryDelay)
+    }
+
+    private func scheduleReceiverReconnectRetryIfNeeded() {
+        guard isInReceiverReconnectRetryWindow else { return }
+        scheduleEventSample(delay: 3.0)
+    }
+
+    private func nextKeyboardNoResponseStatus() -> BatterySnapshotStatus {
         keyboardNoResponseCount += 1
-        return keyboardNoResponseCount > Self.keyboardOfflineThreshold ? "Keyboard offline" : "Keyboard no response"
+        if forceKeyboardOfflineOnNextFailure {
+            forceKeyboardOfflineOnNextFailure = false
+            keyboardNoResponseCount = Self.keyboardOfflineThreshold + 1
+        }
+        return keyboardNoResponseCount > Self.keyboardOfflineThreshold ? .keyboardOffline : .keyboardNoResponse
     }
 
-    private func normalizedErrorText(for error: Error, keyboardNoResponse: Bool) -> String {
-        if keyboardNoResponse { return nextKeyboardNoResponseText() }
+    private func normalizedFailure(
+        for error: Error,
+        keyboardNoResponse: Bool
+    ) -> (status: BatterySnapshotStatus, statusCode: UInt8?) {
+        if keyboardNoResponse { return (nextKeyboardNoResponseStatus(), nil) }
         keyboardNoResponseCount = 0
+        forceKeyboardOfflineOnNextFailure = false
 
         guard let boltError = error as? BoltError else {
-            return "Error: \(String(describing: error))"
+            return (.error, nil)
         }
         switch boltError {
         case .managerOpenFailed(_), .noMatchingDevice, .deviceOpenFailed(_), .setReportFailed(_):
-            return "Receiver disconnected"
+            return (.receiverDisconnected, nil)
         case .hidppV1(let code, _, _), .hidppV2(let code, _, _, _):
-            return String(format: "Error: 0x%02X", code)
+            return (.hidppError, code)
         default:
-            return "Error: \(boltError.description)"
+            return (.error, nil)
+        }
+    }
+
+    private func statusText(for status: BatterySnapshotStatus, code: UInt8? = nil) -> String {
+        switch status {
+        case .connected:
+            return "Connected"
+        case .receiverDisconnected:
+            return "Receiver disconnected"
+        case .reconnecting:
+            return "Reconnecting…"
+        case .keyboardNoResponse:
+            return "Keyboard no response"
+        case .keyboardOffline:
+            return "Keyboard offline"
+        case .hidppError:
+            return String(format: "Error: 0x%02X", code ?? 0)
+        case .error:
+            return "Error"
         }
     }
 
@@ -400,19 +601,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch boltError {
         case .timeout, .featureNotSupported:
             return true
+        case .hidppV1(let code, _, _) where code == 0x04:
+            return true
         default:
             return false
         }
     }
 
-    private func menuErrorTitle(for errorText: String) -> String {
-        if errorText == "Receiver disconnected" || errorText == "Keyboard offline" {
-            return errorText
+    private static func isReceiverTransportError(_ error: Error) -> Bool {
+        guard let boltError = error as? BoltError else { return false }
+        switch boltError {
+        case .managerOpenFailed, .noMatchingDevice, .deviceOpenFailed, .setReportFailed, .clientClosed:
+            return true
+        default:
+            return false
         }
-        return errorText.hasPrefix("Error:") ? errorText : "Error: \(errorText)"
     }
 
-    private func writeFailureSnapshot(lastError: String, sampledAt: Date) {
+    private static func shouldResetClient(after error: Error) -> Bool {
+        guard error is BoltError else { return true }
+        return isReceiverTransportError(error)
+    }
+
+    private func writeFailureSnapshot(
+        status: BatterySnapshotStatus,
+        statusCode: UInt8? = nil,
+        sampledAt: Date
+    ) {
         guard let previous = SnapshotStore.shared.read() else {
             WidgetCenter.shared.reloadAllTimelines()
             return
@@ -426,7 +641,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             deviceType: previous.deviceType,
             lastChargeEndedAt: previous.lastChargeEndedAt,
             lastChargeEndedPercent: previous.lastChargeEndedPercent,
-            lastError: lastError,
+            status: status,
+            statusCode: statusCode,
             producerVersion: Self.producerVersion
         )
         SnapshotStore.shared.write(snapshot)
