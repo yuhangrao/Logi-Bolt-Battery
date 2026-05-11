@@ -77,9 +77,9 @@ Build and install instructions live in the [README](README.md#build-menu-bar-app
   (`lineWidth: 3` → 1.5pt halo each side) with `.blendMode(.destinationOut)`
   inside a `compositingGroup`, so both track and progress taper along the
   bolt wing edges. The bolt is white below 100% SOC and green at 100%.
-- **Logi Bolt branding.** App icon and 20pt `MenuBarBolt` template image
-  drive the menu bar status item. While charging, the menu bar icon composes
-  the logo with an SF Symbol `bolt.fill` corner badge plus a 0.75pt
+- **Menu bar imagery.** App icon and 20pt `MenuBarBolt` template image drive
+  the menu bar status item. While charging, the menu bar icon composes the
+  template image with an SF Symbol `bolt.fill` corner badge plus a 0.75pt
   destinationOut halo (template-image polarity preserved). Image assets are
   user-supplied; the repository ships empty imagesets — see [README](README.md)
   for setup details.
@@ -114,8 +114,7 @@ Build and install instructions live in the [README](README.md#build-menu-bar-app
 - **Liquid Glass background (deferred).** macOS Tahoe 26 currently has a beta
   bug where third-party widgets cannot adopt the system Liquid Glass treatment
   via any public API (`Color.clear`, `.fill.tertiary`, `.regularMaterial`,
-  `.glassEffect(.regular)` all render as opaque dark). First-party widgets
-  bypass this via private frameworks. This release ships a
+  `.glassEffect(.regular)` all render as opaque dark). This release ships a
   `Color.black.opacity(0.18)` + gradient fallback. The switch to system Liquid
   Glass is gated on the bug being resolved in a Tahoe stable release.
 
