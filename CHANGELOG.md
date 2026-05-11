@@ -55,13 +55,14 @@ Build and install instructions live in the [README](README.md#install).
   host calls `WidgetCenter.shared.reloadAllTimelines()` after every sample.
   Provider also schedules a `sampledAt + 30 min + 1s` entry so the widget can
   auto-degrade to `Updated <X> ago` even if the host app stops running.
-- **Widget visual.** Formula-based 2x2 quadrant layout modeled on Apple's
-  Batteries multi-device widget grid: `gridRingDiameter = side * 11/28`,
-  visible ring `side * 5/14`, percentage centered in the right half such that
-  the gap between ring-right and text-left equals the gap between text-right
-  and widget-right. 24pt `keyboard` SF Symbol, 31pt rounded semibold
-  monospaced-digit percentage, 12pt secondary footer. Apple's two-tier color
-  rule: green when charging or `>20%`, red `≤20%`, gray for degraded states.
+- **Widget visual.** Formula-based 2×2 quadrant layout (top-left ring with
+  device glyph, top-right percentage, bottom merged footer area):
+  `gridRingDiameter = side * 11/28`, visible ring `side * 5/14`, percentage
+  centered in the right half such that the gap between ring-right and
+  text-left equals the gap between text-right and widget-right. 24pt
+  `keyboard` SF Symbol, 31pt rounded semibold monospaced-digit percentage,
+  12pt secondary footer. Two-tier color rule: green when charging or `>20%`,
+  red `≤20%`, gray for degraded states.
 - **Charge-history footer.** `Last charged: N% · <elapsed>` with compact
   English (`just now` / `5 min ago` / `2 hr ago` / `1 day ago`), or
   `Charge to start tracking` until the first `charging* → discharging` event
@@ -73,21 +74,19 @@ Build and install instructions live in the [README](README.md#install).
   `Receiver disconnected` (IOKit / set-report failures, ring gray),
   `Keyboard offline` (>6 consecutive timeouts, ring gray), or
   `Error: 0xNN` (HID++ 1.0 / 2.0 protocol error, ring gray).
-- **Charging indicator (Apple-equivalent).** `BoltShape: Shape` hand-codes
-  Apple's `system battery UI.framework` private `custom bolt`
-  (`bolt path reference`) path: 12 anchors, 6 bezier segments, PDF Y-up flipped to
-  SwiftUI Y-down. Visible bolt is 12×16pt at `offset(y: -radius)` on the
-  ring's 12 o'clock; mask uses the same shape filled and stroked
+- **Charging indicator.** `BoltShape: Shape` encodes a custom 12-anchor,
+  6-segment bezier bolt path (PDF-style Y-up coordinates flipped to SwiftUI
+  Y-down). Visible bolt is 12×16pt at `offset(y: -radius)` on the ring's 12
+  o'clock; the mask uses the same shape filled and stroked
   (`lineWidth: 3` → 1.5pt halo each side) with `.blendMode(.destinationOut)`
   inside a `compositingGroup`, so both track and progress taper along the
-  bolt wing edges. Bolt is white below 100% SOC and green at 100%, matching
-  the intended behavior. Implementation recipe (`implementation notes` →
-  `asset lookup` → `vector extraction`) documented in
-  `docs/development-plan.md` Step 9.6.
+  bolt wing edges. The bolt is white below 100% SOC and green at 100%.
 - **Logi Bolt branding.** App icon and 20pt `MenuBarBolt` template image
-  derived from the user-provided `LogiBoltIconResources/`. While charging,
-  the menu bar icon composes the logo with an SF Symbol `bolt.fill` corner
-  badge plus a 0.75pt destinationOut halo (template-image polarity preserved).
+  drive the menu bar status item. While charging, the menu bar icon composes
+  the logo with an SF Symbol `bolt.fill` corner badge plus a 0.75pt
+  destinationOut halo (template-image polarity preserved). Image assets are
+  user-supplied; the repository ships empty imagesets — see [README](README.md)
+  for setup details.
 - **Login item.** Menu bar **Open at Login** toggle backed by
   `SMAppService.mainApp.register()` / `unregister()`. When macOS reports
   `requiresApproval`, the menu jumps to *System Settings → General →
@@ -110,21 +109,19 @@ Build and install instructions live in the [README](README.md#install).
   file name is internal; only its `CFBundleDisplayName` is "Bolt Battery
   Widget". The XcodeGen project, `.xcodeproj` file, and Xcode target are still
   named `BoltBattery` so existing pbxproj references stay stable.
-- **Documentation.** `docs/architecture.md`, `docs/development-plan.md`,
-  `docs/open-decisions.md`, plus a README **Install** section covering the
-  Personal Team packaging flow, widget add-to-Notification-Center, login item
-  enablement, and log inspection.
+- **Documentation.** README with quickstart, build instructions, and
+  configuration notes covering the Personal Team packaging flow, widget
+  add-to-Notification-Center, login item enablement, and log inspection.
 
 ### Known limitations
 
-- **Liquid Glass background (Step 7.5, deferred).** macOS Tahoe 26 has a
-  beta bug where third-party widgets cannot adopt the system Liquid Glass
-  treatment via any public API (`Color.clear`, `.fill.tertiary`,
-  `.regularMaterial`, `.glassEffect(.regular)` all render as opaque dark).
-  the reference battery widget bypasses via the private `BatteryCenter.framework`.
-  This release ships a `Color.black.opacity(0.18)` + gradient fallback. The
-  switch to system Liquid Glass is gated on Apple resolving the bug in a
-  Tahoe stable release.
+- **Liquid Glass background (deferred).** macOS Tahoe 26 currently has a beta
+  bug where third-party widgets cannot adopt the system Liquid Glass treatment
+  via any public API (`Color.clear`, `.fill.tertiary`, `.regularMaterial`,
+  `.glassEffect(.regular)` all render as opaque dark). First-party widgets
+  bypass this via private frameworks. This release ships a
+  `Color.black.opacity(0.18)` + gradient fallback. The switch to system Liquid
+  Glass is gated on the bug being resolved in a Tahoe stable release.
 
 [Unreleased]: https://github.com/yuhangrao/Logi-Bolt-Battery/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/yuhangrao/Logi-Bolt-Battery/releases/tag/v0.1.0

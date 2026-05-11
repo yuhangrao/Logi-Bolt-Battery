@@ -29,3 +29,11 @@ state/
 
 # Local packaging artifacts
 dist/
+
+# Publish-staging handoff (internal note for the sanitization mirror, never publish)
+PUBLISH_HANDOFF.md
+SYNC_LOG.md
+
+docs/architecture.md
+docs/development-plan.md
+docs/open-decisions.md

@@ -107,8 +107,8 @@ private enum WidgetDisplayState {
 }
 
 private struct BoltShape: Shape {
-    // Path drawn as Apple's system battery UI bolt path reference (14×19pt design).
-    // PDF uses Y-up, SwiftUI uses Y-down, so y is flipped to (19 - y).
+    // Custom bolt path drawn against a 14×19pt design canvas; y is flipped
+    // (PDF-style Y-up coordinates are inverted to SwiftUI Y-down).
     func path(in rect: CGRect) -> Path {
         let s = min(rect.width / 14, rect.height / 19)
         let dx = (rect.width - 14 * s) / 2 + rect.minX
@@ -154,14 +154,12 @@ private struct BatteryRing: View {
     let forceGray: Bool
 
     private let lineWidth: CGFloat = 6.5
-    // ~20% of our 63pt ring outer diameter, matching Apple's bolt-to-ring
-    // proportion measured from a high-res Batteries widget reference. Apple's
-    // 14x19 hero asset is too big for our cell-sized ring; the 9x12 small
-    // asset reads as too small. The vector path scales cleanly into 12x16.
+    // ~20% of the 63pt ring outer diameter; the 12×16pt vector reads cleanly
+    // at this cell size.
     private let boltDesignWidth: CGFloat = 12
     private let boltDesignHeight: CGFloat = 16
-    // 1.5pt halo on each side, matching Apple's bolt-shaped knockout mask
-    // (which is the same path stroked at lineWidth 3).
+    // 1.5pt halo on each side (same path stroked at lineWidth 3) gives the
+    // bolt-shaped knockout some breathing room against the progress ring.
     private let maskStrokeWidth: CGFloat = 3
 
     var body: some View {
@@ -182,8 +180,8 @@ private struct BatteryRing: View {
                     // Bolt-shaped knockout: same path, fill + 4pt stroke. After
                     // destinationOut this carves a bolt + uniform 2pt halo
                     // through both track and progress, so the ring tapers
-                    // along the bolt's wing edges. Gap reads as the widget
-                    // background, which is what the reference battery widget does.
+                    // along the bolt's wing edges and the gap reads as the
+                    // widget background instead of the gray track.
                     ZStack {
                         BoltShape().fill(Color.black)
                         BoltShape().stroke(Color.black, lineWidth: maskStrokeWidth)

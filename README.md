@@ -1,17 +1,72 @@
-# Logi-Bolt-Battery
+# Bolt Battery
 
-Read battery and device info from a Logitech Bolt receiver and any paired peripheral on macOS, using raw HID++ 2.0 over IOKit. No `Logi Options+`, no Solaar, no third-party libraries.
+A native macOS battery widget for keyboards paired with a Logitech Bolt receiver.
 
-## Status
+Apple's built-in Batteries widget can't see Bolt-paired devices — the receiver
+presents itself to macOS as a generic USB HID composite device, hiding the
+real keyboard battery behind Logitech's proprietary HID++ protocol. Bolt
+Battery talks HID++ 2.0 directly to the receiver and renders the result in
+Notification Center, with no Logi Options+, no Solaar, and no third-party
+runtime dependencies.
 
-`bolt_battery.py` — working Python CLI probe.
+```
+━━━ MX Keys S ━━━
+  Battery:   35% [discharging]   (UnifiedBattery 0x1004)
+  Firmware:  RBK v81.01.B0015
+```
 
-- Talks HID++ 2.0 directly to the Bolt receiver's vendor-specific HID interface (PrimaryUsagePage `0xFF00`, 20-byte long reports in/out)
-- Uses `ctypes` to bind macOS IOKit's `IOHIDManager` / `IOHIDDevice` / `IOHIDDeviceSetReport` / report callbacks
-- No external dependencies (stdlib only), no TCC permission prompt
-- Iterates device indices 1–6 and reports each paired device's name, type, battery (UnifiedBattery `0x1004` with fallback to legacy `0x1000`), and firmware versions
+## Features
 
-Sample output on this machine:
+- **macOS Notification Center widget** — small `.systemSmall` card with a
+  circular progress ring, large percentage readout, and a charge-history
+  footer (`Last charged: N% · 5 min ago`). Two-tier color rule: green when
+  charging or above 20%, red at or below 20%.
+- **Menu bar status item** — image-only logo, drop-down with the most recent
+  reading, connection status, "Last sampled" timestamp, *Show Logs…*,
+  *Open at Login*, and *Quit*.
+- **Adaptive sampling** — every 5 minutes while discharging, every 1 minute
+  while charging or on external power. Immediate refresh on launch, wake-from-
+  sleep, charging-cable plug/unplug, keyboard wake/reconnect/disconnect, and
+  receiver USB-C unplug/replug — all driven by unsolicited HID++ reports and
+  IOKit events rather than blind high-frequency polling.
+- **Graceful degradation** — receiver-disconnected, keyboard-offline, stale
+  (>30 min), and HID++ error states each have distinct, structured snapshots
+  so the widget never shows a stale percentage as if it were fresh.
+- **Login item** — one-toggle launch-at-login via `SMAppService.mainApp`,
+  jumping to *System Settings → Login Items* the first time approval is
+  required.
+- **Structured logging** — every sample, charging event, and login-item
+  transition flows through `os.Logger`. *Show Logs…* dumps the last 6 hours
+  to a `/tmp/BoltBattery-<timestamp>.log` and opens it in your default log
+  viewer.
+- **Standalone Python CLI** — `bolt_battery.py` is a stdlib-only HID++ probe
+  that ships alongside the app for ad-hoc inspection and protocol debugging.
+
+## Requirements
+
+- macOS 13 (Ventura) or later, Apple Silicon
+- A Logitech Bolt receiver (`VID 0x046D`, `PID 0xC548`) plugged in, with a
+  keyboard already paired (use Logi Options+ once to pair, or any Bolt-aware
+  pairing tool — Bolt Battery is read-only)
+- Xcode 14+ (for the menu bar app and widget extension)
+- An Apple ID added to Xcode → Settings → Accounts (a free Personal Team is
+  enough for personal use; the app is signed with an Apple Development
+  certificate, not notarized)
+- [`xcodegen`](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+
+For the Python CLI alone, only Python 3 with stdlib is required — no Xcode,
+no pip installs, no entitlements.
+
+## Quick start (Python CLI)
+
+```bash
+python3 bolt_battery.py            # human-readable output
+python3 bolt_battery.py --json     # JSON payload
+python3 bolt_battery.py --json --device-type keyboard | jq '.socPercent'
+python3 bolt_battery.py --debug    # raw HID++ frames to stderr
+```
+
+Sample output:
 
 ```
 ━━━ Device #1 ━━━
@@ -23,84 +78,78 @@ Sample output on this machine:
   Firmware:       MainApp    RBK v81.01.B0015
 ```
 
-Run: `python3 bolt_battery.py` for human-readable output. Flags:
+## Build (menu bar app + widget)
 
-- `--json` — emit a `{"devices":[...]}` payload with `socPercent` / `chargingState` / `externalPower` / `deviceName` / `deviceType` (matching the future `BatterySnapshot` schema, so the Swift port can diff against this output)
-- `--device-type keyboard` — only the first keyboard, and JSON mode unwraps to a single object (e.g. `python3 bolt_battery.py --json --device-type keyboard | jq '.socPercent'`)
-- `--debug` — print raw HID++ frames to stderr (safe to combine with `--json`)
+### 1. Configure your Team ID
 
-`BoltHIDPP` Swift package — full HID++ 2.0 port (Steps 2–3 of the plan).
+The app uses an [App Group](https://developer.apple.com/documentation/xcode/configuring-app-groups)
+to share a battery snapshot between the menu bar host and the widget
+extension. On macOS, App Group identifiers **must** start with your 10-
+character Apple Developer Team ID — there is no way to omit it.
 
-- `swift build` / `swift test` / `swift run bolt-battery-swift [--json] [--device-type any|keyboard]`
-- `public actor BoltClient` exposes `getProtocolVersion` / `getFeatureIndex` / `getDeviceName` / `getDeviceType` / `getBattery` (UnifiedBattery `0x1004` with fallback to legacy `0x1000`) / `getFirmware` / `discoverKeyboard` / `ping`. Errors are typed `BoltError` (IOKit return codes + HID++ 1.0 / 2.0 protocol errors with raw codes).
-- `bolt-battery-swift` produces the same human and JSON output as `bolt_battery.py`. Verified byte-identical: `swift run bolt-battery-swift --json | jq -S 'del(.devices[].sampledAt)'` == `python3 bolt_battery.py --json | jq -S 'del(.devices[].sampledAt)'` on the live MX Keys S.
+Replace every `YOUR_TEAM_ID` placeholder with your own team ID. You can find
+your team ID in [Apple Developer → Membership](https://developer.apple.com/account/#MembershipDetailsCard),
+or via `security find-identity -p codesigning -v` (look at the parentheses
+after `Apple Development:` entries).
 
-`BoltBattery` menu bar host app — Steps 4–5 plus producer-side Step 8/8.1/9 history, cable-event tracking, degraded-state snapshots, and Step 9.5/9.6 menu bar branding.
+Files to edit:
 
-- Lives under `app/`. Project is declared in `app/project.yml` (XcodeGen) and signed with the Personal Team locked in `docs/open-decisions.md` D8.
-- Build: `brew install xcodegen` once, then `cd app && xcodegen generate && xcodebuild -scheme BoltBattery -configuration Debug build`. Open the resulting `Bolt Battery.app` to see the image-only Logi Bolt icon in the menu bar — the app polls the Bolt receiver every 5 minutes while discharging and every 1 minute while charging / on external power, then updates a small drop-down (`MX Keys S — N% (state)` from the last successful battery read, `Status: Connected / Reconnecting… / Receiver disconnected / Keyboard offline / ...`, `Last sampled X ago`, `Show Logs…`, `Open at Login`, `Quit`). It also wakes from `NSWorkspace.didWakeNotification` for an immediate post-sleep sample and listens for Bolt receiver unsolicited battery, wireless-status, receiver connection, and USB-C presence events so charging-cable plug/unplug, keyboard wake/reconnect/disconnect, and receiver unplug/replug refresh the snapshot and widget within seconds when the hardware reports them; receiver replug uses a short `Reconnecting…` grace window, then keeps retrying in the background while the widget shows keyboard offline if the keyboard remains asleep. While charging, the menu bar icon composes the Logi Bolt logo with an SF Symbol `bolt.fill` corner badge (8pt, 0.75pt destinationOut halo) so polarity still adapts to the menu bar tint.
-- Step 10 wired up the launch agent and the log inspection path: `Open at Login` toggles `SMAppService.mainApp` (jumps to *System Settings → General → Login Items* the first time the user has to approve), and `Show Logs…` spawns `/usr/bin/log show` with a `subsystem == "industries.stark.boltbattery"` predicate, writes 6 hours of output to `/tmp/BoltBattery-<timestamp>.log`, and opens it with the system default handler so the file is non-empty on first click instead of asking the user to fight Console.app's filters. Startup, sample success/failure, charging-cable events, wireless/receiver reports, receiver presence events, and login-item transitions all flow through `os.Logger`. See the [Install](#install) section for the exact build/copy steps.
-- After every successful sample the app writes a `BatterySnapshot` (`app/Shared/BatterySnapshot.swift`) into the App Group `YOUR_TEAM_ID.industries.stark.boltbattery` via `SnapshotStore.shared.write(...)`. It records the last observed `charging* → discharging` transition as `lastChargeEndedAt` / `lastChargeEndedPercent`, without requiring the battery to reach 100%. Failed samples preserve the previous battery/device fields, update `sampledAt`, set structured `status` / `statusCode` values such as `receiverDisconnected`, `keyboardOffline`, or `hidppError(0xNN)`, and reload widget timelines. Inspect the stored JSON with `/usr/libexec/PlistBuddy -c "Print :snapshot" ~/Library/Group\ Containers/YOUR_TEAM_ID.industries.stark.boltbattery/Library/Preferences/YOUR_TEAM_ID.industries.stark.boltbattery.plist` (a non-entitled `defaults read <group>` will say "Domain does not exist" — that's expected for App Group plists on macOS).
+- `app/project.yml` — `DEVELOPMENT_TEAM` setting + both
+  `application-groups` entries
+- `app/BoltBattery/BoltBattery.entitlements` — the `application-groups` array
+- `app/BoltBatteryWidget/BoltBatteryWidget.entitlements` — the
+  `application-groups` array
+- `app/Shared/BatterySnapshot.swift` — the `AppGroup.id` constant
 
-`BoltBatteryWidget` widget extension — Steps 6–9.6 plus Step 10.1 status handling.
+```bash
+# Quick one-liner (BSD sed on macOS):
+git grep -l YOUR_TEAM_ID | xargs sed -i '' 's/YOUR_TEAM_ID/ABCDEF1234/g'
+```
 
-- Embedded inside `Bolt Battery.app/Contents/PlugIns/BoltBatteryWidget.appex` (the widget's own product name has no space — only the host bundle does). Bundle ID `industries.stark.boltbattery.widget`, sandboxed, sharing the same App Group as the host so it can read `BatterySnapshot`.
-- `app/BoltBatteryWidget/BoltBatteryWidget.swift` is a `@main` `Widget` exposing one `.systemSmall` configuration. The `TimelineProvider` reads `SnapshotStore.shared.read()` only; the host app calls `WidgetCenter.shared.reloadAllTimelines()` after successful and failed samples so the widget reflects the latest snapshot. If the host app stops running, the provider schedules a future entry at `sampledAt + 30 min` so the widget can degrade to `Updated <X> ago` without doing any HID++ work in the extension.
-- Step 7 polished the view as a **2x2 quadrant layout** modeled on the reference battery multi-device widget grid (top-left ring, top-right percentage, bottom merged area for the charge-history footer or degraded-state copy). The sizing is formula-based from Apple's 2×2 ring grid: the grid centerlines use `gridRingDiameter = side * 11 / 28`, while the visible ring diameter is corrected to `side * 5 / 14` for the current macOS widget coordinate space. The `keyboard` SF Symbol is centered (24pt regular), the percentage uses 31pt rounded semibold type with a constrained width budget so `100%` scales down just enough to keep side breathing room, and the bottom row renders either compact charge-history text like `Last charged: 75% · 5 min ago` (fallback: `Charge to start tracking`) or Step 9 degraded copy like `Open Bolt Battery to start`, `Receiver disconnected`, `Keyboard offline`, `Error: 0xNN`, or `Updated 30 min ago`. Layout disables WidgetKit content margins and positions elements with measured `GeometryReader` coordinates; the percentage is centered in the remaining region from ring-right to widget-right, preserving balanced side gaps without assuming text width equals ring diameter. Color rule is Apple's verified two-tier behavior — green when charging or `>20%`, red `≤20%` (Apple uses yellow only for Low Power Mode, which keyboards don't have); degraded error states force the ring gray, while stale snapshots show the old value half-transparent.
-- Step 9.6 swaps the placeholder `bolt.fill` badge for an exact match of the reference battery widget charging indicator. The bolt path is hand-drawn as `system battery UI.framework`'s private `custom bolt` asset (`bolt path reference`), encoded as a SwiftUI `BoltShape` (12 anchors, 6 bezier segments, with a Y-flip from PDF Y-up to SwiftUI Y-down). The visible bolt is `BoltShape().fill` in a 12×16pt frame at `offset(y: -radius)`, white below 100% and green at 100%. The ring is carved by a destinationOut mask — same path filled plus a `stroke(lineWidth: 3)` (1.5pt halo on each side, mirroring `bolt-shaped knockout`) wrapped in a `compositingGroup` — so both track and progress taper along the bolt's wing edges and the gap reads as the widget background, not the gray track. See `docs/development-plan.md` Step 9.6 for the implementation recipe (`implementation notes` → `asset lookup` → `vector extraction`).
-- **Background — known macOS Tahoe 26 limitation**: third-party widgets in Notification Center cannot currently adopt the system Liquid Glass treatment that Apple's first-party widgets show, regardless of what `containerBackground(for: .widget)` is set to (`Color.clear` / `Color.X.opacity(...)` / `.fill.tertiary` / `.regularMaterial` / `.glassEffect(.regular)` all render as opaque dark). This is documented in [LiquidGlassReference](https://github.com/conorluddy/LiquidGlassReference) as "Status: No complete solution yet." the reference battery widget bypasses this via the private `BatteryCenter.framework`. As a fallback, our widget paints a `Color.black.opacity(0.18)` base plus top/bottom `LinearGradient` decorations to approximate a glossy card, but this is not real Liquid Glass. Step 7.5 in `docs/development-plan.md` will switch to `Color.clear` once Apple resolves the bug in a Tahoe stable release.
-- After building, drag *Bolt Battery* from Notification Center → Edit Widgets to add it. The same `cd app && xcodegen generate && xcodebuild ...` command builds both targets in one go.
+### 2. Provide menu bar / app icons
 
-## Why a separate widget
+This repository ships **empty imagesets** for the menu bar logo and the app
+icon. To avoid redistributing third-party brand assets, no PNGs are included.
 
-Apple's built-in Batteries widget is fed by the private `com.apple.BatteryCenter` framework, which only sees devices that publish a `BatteryPercent` property in IORegistry. The Bolt receiver presents itself to macOS as a generic USB HID composite device, hiding the real keyboard/mouse battery behind Logitech's HID++ protocol — so it can't be merged into Apple's widget without virtualizing a BLE peripheral (impossible on macOS userspace) or shipping a DriverKit DEXT (entitlement-gated, brittle).
+Drop your own art into:
 
-This repo therefore ships a **standalone Notification Center widget** with its own data path: the menu bar app polls the receiver via `BoltHIDPP`, writes a `BatterySnapshot` into an App Group, and the widget extension renders it.
+- `app/BoltBattery/Assets.xcassets/AppIcon.appiconset/` — supply
+  `icon_16x16.png` through `icon_512x512@2x.png` (10 PNGs total, names listed
+  in the imageset's `Contents.json`)
+- `app/BoltBattery/Assets.xcassets/MenuBarBolt.imageset/` — supply three
+  `menu_bar_bolt_template{,@2x,@3x}.png` template PNGs (20pt design size, pure
+  black on transparent — they're rendered as template images so the menu bar
+  inverts polarity for you)
 
-### Goal visual
+Provide at least placeholder PNGs before building; Xcode's asset compiler
+expects the filenames listed in each imageset's `Contents.json` to exist.
 
-- **Form factor:** macOS small widget (single rectangle), visual style matching Apple's built-in Batteries widget — rounded dark background, **2x2 quadrant layout** cleanly multi-device grid (top-left = circular progress ring with device glyph centered; top-right = large percentage; bottom-half = charge-history footer), identical color ramp (Apple's verified two-tier behavior: green when charging or `>20%`, red `≤20%`)
-- **Primary readout:** current battery percentage + charging state, matching Apple's widget behavior (ring fills clockwise, ring color reflects level, glyph shows charging bolt when applicable)
-- **Footer line:** small English text — `Last charged: <percent>% · <elapsed>` (e.g. `Last charged: 75% · 5 min ago`, or `just now` for the first minute)
-
-### Roadmap
-
-Implementation is broken into 10 main steps with 5 follow-up sub-steps. **Steps 1–10.1 and Step 4.1 are landed** (Python protocol probe → Swift HID++ port → menu bar host app → App Group snapshot → widget extension scaffold → widget visual polish to a formula-based 2x2 quadrant layout matching the reference battery widget → menu sampled-line refresh on menu open → last charge-end history + footer → immediate charging-cable plug/unplug refresh via Bolt unsolicited HID++ reports → degraded/error states for missing, stale, disconnected, offline, and HID++ error snapshots → Logi Bolt app icon plus image-only menu bar status item → charging indicator hand-drawn as Apple's system battery UI bolt assets, with destinationOut bolt-shaped knockout on the ring and a charging corner badge on the menu bar logo → packaging metadata, `SMAppService.mainApp` "Open at Login" toggle, `os.Logger` instrumentation feeding a "Show Logs…" log dump path and Install docs → immediate refresh for keyboard wake/reconnect/disconnect and receiver unplug/replug events). Remaining: Step 7.5 retry system Liquid Glass background once the macOS Tahoe beta bug is fixed. Detail in:
-
-- [`docs/architecture.md`](docs/architecture.md) — three-tier architecture (HID++ producer → App Group snapshot → widget extension), refresh strategy, macOS-specific App Group quirks
-- [`docs/development-plan.md`](docs/development-plan.md) — Step 0–10.1 with scope, acceptance criteria, and explicit non-goals per step
-- [`docs/open-decisions.md`](docs/open-decisions.md) — locked design decisions
-- [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog v0.1.0 release notes
-
-## Requirements
-
-- macOS Apple Silicon (tested on Darwin 25.5)
-- A Logi Bolt receiver (`VID 0x046D`, `PID 0xC548`) plugged in
-- Python 3 with stdlib (no pip installs needed for `bolt_battery.py`)
-- For the Swift package (Step 2+): Xcode Command Line Tools (`xcode-select --install`); Swift 5.9+ toolchain. Tested on Swift 6.3.1 / Xcode 26
-- For the menu bar app and widget extension (Steps 4+): full Xcode 14+ install, plus an Apple ID added to Xcode → Settings → Accounts (Personal Team is sufficient — see `docs/open-decisions.md` D8). Also `brew install xcodegen` for regenerating `app/BoltBattery.xcodeproj` from `app/project.yml`.
-
-## Install
-
-The app is packaged with a Personal Team Apple Development signature. Build artifacts can be copied directly to `/Applications`; when present, `dist/Bolt Battery.app` is the app bundle and `dist/Bolt-Battery-0.1.0.dmg` is the drag-to-Applications disk image.
-
-### One-time setup
-
-1. Install full Xcode 14+ from the App Store, open it once, accept the license, and add your Apple ID under **Settings → Accounts** so a Personal Team is provisioned (see [`docs/open-decisions.md`](docs/open-decisions.md) D8).
-2. `brew install xcodegen`.
-3. If you fork into your own Apple ID: change `DEVELOPMENT_TEAM` in `app/project.yml` to your 10-character team ID, replace every occurrence of the App Group `YOUR_TEAM_ID.industries.stark.boltbattery` (project YAML, entitlements, the constants in `app/Shared/BatterySnapshot.swift`) with `<YOUR_TEAMID>.industries.stark.boltbattery` (or any reverse-DNS you prefer prefixed with your team ID — macOS App Groups must start with the team ID), then re-run `xcodegen generate`.
-
-### Build package artifacts
+### 3. Build
 
 ```bash
 cd app
 xcodegen generate
 xcodebuild -scheme BoltBattery -configuration Release \
   -derivedDataPath /tmp/boltbat-build build
-cd ..
+```
+
+The product is `Bolt Battery.app` (with a literal space — the `PRODUCT_NAME`
+is set that way so Finder, Spotlight, Login Items, and the application menu
+all read "Bolt Battery"). The widget extension is embedded at
+`Bolt Battery.app/Contents/PlugIns/BoltBatteryWidget.appex`.
+
+### 4. Install
+
+```bash
 mkdir -p dist
-rm -rf "dist/Bolt Battery.app"
 cp -R "/tmp/boltbat-build/Build/Products/Release/Bolt Battery.app" "dist/Bolt Battery.app"
+cp -R "dist/Bolt Battery.app" /Applications/
+open "/Applications/Bolt Battery.app"
+```
+
+Optional DMG:
+
+```bash
 rm -rf /tmp/boltbat-dmg
 mkdir -p "/tmp/boltbat-dmg/Bolt Battery"
 cp -R "dist/Bolt Battery.app" "/tmp/boltbat-dmg/Bolt Battery/Bolt Battery.app"
@@ -110,29 +159,123 @@ hdiutil create -volname "Bolt Battery" \
   -ov -format UDZO "dist/Bolt-Battery-0.1.0.dmg"
 ```
 
-The build emits a `Bolt Battery.app` (with a literal space — the `PRODUCT_NAME` is set that way in `app/project.yml` so Finder, Spotlight, Login Items, and the application menu all show "Bolt Battery") signed with the Personal Team's Apple Development certificate. `dist/Bolt Battery.app` can be copied directly to `/Applications`, while `dist/Bolt-Battery-0.1.0.dmg` opens as a drag-to-Applications disk image.
+## Usage
 
-### Install
+### Menu bar
+
+Click the menu bar logo:
+
+- First row: most recent successful reading, e.g. `MX Keys S — 64% (discharging)`
+- `Status:` — current connection state (`Connected`, `Reconnecting…`,
+  `Receiver disconnected`, `Keyboard offline`, or `Error: 0xNN`)
+- `Last sampled` — relative time since the last successful read
+- *Show Logs…* — dump the last 6 hours of `os.Logger` output and open it
+- *Open at Login* — toggle launch-at-login via `SMAppService.mainApp`
+- *Quit*
+
+### Notification Center widget
+
+Right edge of the menu bar → swipe left to open Notification Center → scroll
+to the bottom → **Edit Widgets** → search "Bolt Battery" → drag the small
+variant into the panel.
+
+The widget reads its data from the App Group snapshot; it does no HID++ work
+of its own and won't drain battery life on the keyboard side.
+
+### Inspecting the App Group snapshot
 
 ```bash
-cp -R "dist/Bolt Battery.app" /Applications/
-open "/Applications/Bolt Battery.app"
+/usr/libexec/PlistBuddy -c "Print :snapshot" \
+  ~/Library/Group\ Containers/YOUR_TEAM_ID.industries.stark.boltbattery/Library/Preferences/YOUR_TEAM_ID.industries.stark.boltbattery.plist
 ```
 
-After `open` you should see the Logi Bolt logo in the menu bar within a couple of seconds — the app samples the receiver immediately on launch.
-
-### Add the widget
-
-Notification Center (swipe right from the right edge of the menu bar, or click the date/time) → scroll to the bottom → **Edit Widgets** → search "Bolt Battery" → drag the small variant into Notification Center.
-
-### Enable launch at login
-
-Click the menu bar logo → **Open at Login**. The first time you toggle it on, macOS may show "Approve in Settings…" alongside the menu item; clicking it again opens *System Settings → General → Login Items* where you can flip the toggle on. Subsequent toggles register/unregister the launch agent silently via `SMAppService.mainApp`.
-
-### Inspect logs
-
-Click the menu bar logo → **Show Logs…**. The host app spawns `/usr/bin/log show --predicate 'subsystem == "industries.stark.boltbattery"' --last 6h --info --debug --style compact`, writes the output to `/tmp/BoltBattery-<timestamp>.log`, and opens that file with the system default `.log` handler (Console.app or your editor of choice). Re-run the menu item any time you want a fresh window. The Python CLI (`python3 bolt_battery.py --debug`) is still the lower-level diff tool when you need raw HID++ frames.
+A non-entitled `defaults read <group>` reports "Domain does not exist" — that's
+expected for App Group plists on macOS.
 
 ### Uninstall
 
-Quit from the menu bar logo → drag `/Applications/Bolt Battery.app` to the trash → optionally `defaults delete YOUR_TEAM_ID.industries.stark.boltbattery` to drop the App Group snapshot. The widget will fall back to "Open Bolt Battery to start" until the app is reinstalled.
+Quit from the menu bar logo, drag `/Applications/Bolt Battery.app` to the
+trash, then optionally clear the App Group snapshot:
+
+```bash
+defaults delete YOUR_TEAM_ID.industries.stark.boltbattery
+```
+
+## Architecture
+
+Three-tier producer / store / consumer:
+
+```
+┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│  Menu bar host app  │──▶│   App Group plist   │──▶│  Widget extension   │
+│  (HID++ producer)   │    │  (BatterySnapshot)  │    │  (read-only render) │
+└─────────────────────┘    └─────────────────────┘    └─────────────────────┘
+```
+
+- The **host app** owns the long-lived `BoltClient` and is the only process
+  doing HID++ I/O. It samples on a schedule plus on a small set of OS / HID
+  events (wake from sleep, charging-cable plug/unplug, wireless-status report,
+  receiver USB-C presence change).
+- Each successful sample is written as a `BatterySnapshot`
+  (`app/Shared/BatterySnapshot.swift`) into a UserDefaults suite keyed by the
+  App Group ID. Failed samples preserve the previous battery/device fields
+  and set a structured `status` / `statusCode` instead of fabricating a
+  reading.
+- The **widget extension** has its own short-lived sandbox and only reads
+  from the App Group. The host calls `WidgetCenter.shared.reloadAllTimelines()`
+  after every sample so the widget reflects the latest data within a frame
+  or two. The provider also schedules a `sampledAt + 30 min` entry so the
+  widget can degrade to `Updated <X> ago` even if the host app stops running.
+
+## Repository layout
+
+```
+.
+├── bolt_battery.py            # Python HID++ probe / protocol reference
+├── Package.swift              # Swift Package manifest (BoltHIDPP library)
+├── Sources/
+│   ├── BoltHIDPP/             # HID++ 2.0 actor-based client
+│   └── bolt-battery-swift/    # Swift CLI executable
+├── Tests/
+│   └── BoltHIDPPTests/        # Protocol + ping unit tests
+├── app/
+│   ├── project.yml            # XcodeGen project (source of truth)
+│   ├── BoltBattery/           # Menu bar host app
+│   ├── BoltBatteryWidget/     # WidgetKit extension
+│   └── Shared/                # BatterySnapshot + SnapshotStore
+├── CHANGELOG.md
+├── LICENSE
+└── README.md
+```
+
+The `BoltHIDPP` Swift package is independently usable: `swift build`,
+`swift test`, and `swift run bolt-battery-swift [--json] [--device-type any|keyboard]`
+all work from a checkout with only Xcode Command Line Tools installed.
+
+## Troubleshooting
+
+- **Menu bar icon never appears.** The app is `LSUIElement` (no Dock icon).
+  Check `~/Library/Logs/` and try *Show Logs…* from a second build, or run
+  the binary directly from Terminal to surface `stderr`.
+- **Widget shows "Open Bolt Battery to start".** No snapshot has been
+  written yet — either the host app hasn't launched, or the App Group ID in
+  the widget entitlements doesn't match the host. Re-run `xcodegen generate`
+  after editing entitlements and rebuild both targets.
+- **Widget shows "Receiver disconnected" or "Keyboard offline".** Run
+  `python3 bolt_battery.py --debug` to confirm the receiver is enumerated
+  and the keyboard responds. The Python CLI is the canonical protocol probe.
+- **Login item: "Approve in Settings…"** macOS requires explicit approval on
+  first registration. Clicking the menu item again opens *System Settings →
+  General → Login Items*; flip the toggle on once and subsequent registrations
+  are silent.
+- **Liquid Glass background looks flat.** macOS Tahoe 26 currently has a beta
+  bug where third-party widgets cannot adopt the system Liquid Glass
+  treatment; the app ships a gradient fallback until the bug is fixed.
+
+## License
+
+Bolt Battery is released under the GNU General Public License v3.0. See
+[LICENSE](LICENSE) for the full text.
+
+This project is not affiliated with, endorsed by, or sponsored by Logitech.
+"Logitech" and "Logi Bolt" are trademarks of their respective owners.
