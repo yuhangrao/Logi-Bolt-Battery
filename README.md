@@ -1,13 +1,13 @@
 # Bolt Battery
 
-A native macOS battery widget for keyboards paired with a Logitech Bolt receiver.
+An Apple-like macOS battery widget for keyboards paired with a Logitech Bolt receiver.
 
 Apple's built-in Batteries widget can't see Bolt-paired devices — the receiver
 presents itself to macOS as a generic USB HID composite device, hiding the
 real keyboard battery behind Logitech's proprietary HID++ protocol. Bolt
-Battery talks HID++ 2.0 directly to the receiver and renders the result in
-Notification Center, with no Logi Options+, no Solaar, and no third-party
-runtime dependencies.
+Battery talks HID++ 2.0 directly to the receiver and renders the result as a
+compact widget, with no Logi Options+, no Solaar, and no third-party runtime
+dependencies.
 
 ```
 ━━━ MX Keys S ━━━
@@ -17,10 +17,10 @@ runtime dependencies.
 
 ## Features
 
-- **macOS Notification Center widget** — small `.systemSmall` card with a
-  circular progress ring, large percentage readout, and a charge-history
-  footer (`Last charged: N% · 5 min ago`). Two-tier color rule: green when
-  charging or above 20%, red at or below 20%.
+- **Apple-like macOS widget** — small `.systemSmall` card with a circular
+  progress ring, large percentage readout, and a charge-history footer
+  (`Last charged: N% · 5 min ago`). Two-tier color rule: green when charging
+  or above 20%, red at or below 20%.
 - **Menu bar status item** — image-only logo, drop-down with the most recent
   reading, connection status, "Last sampled" timestamp, *Show Logs…*,
   *Open at Login*, and *Quit*.
@@ -173,11 +173,9 @@ Click the menu bar logo:
 - *Open at Login* — toggle launch-at-login via `SMAppService.mainApp`
 - *Quit*
 
-### Notification Center widget
+### Widget
 
-Right edge of the menu bar → swipe left to open Notification Center → scroll
-to the bottom → **Edit Widgets** → search "Bolt Battery" → drag the small
-variant into the panel.
+Add **Bolt Battery** from macOS **Edit Widgets**.
 
 The widget reads its data from the App Group snapshot; it does no HID++ work
 of its own and won't drain battery life on the keyboard side.

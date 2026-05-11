@@ -5,22 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] — 2026-05-11
 
-### Added
-
-- Refresh on HID++ wireless-status / receiver connection reports and Bolt receiver USB-C presence changes, so keyboard wake/reconnect/disconnect and receiver unplug/replug events can update the widget without waiting for the polling interval; receiver replug now uses a short `Reconnecting…` grace window plus background retry before settling on keyboard offline.
-- Added a menu `Status:` row for current connected/reconnecting/offline/receiver/error state while keeping the first row pinned to the last successful battery reading.
-
-### Fixed
-
-- `Last sampled` in the menu now advances only after a successful battery read; failed samples still refresh widget degraded state but no longer make the menu claim a fresh successful sample.
-- Constrained the widget percentage readout to preserve side breathing room at `100%`; 2-digit values stay at the original 31pt size, while `100%` scales down slightly instead of touching the ring and widget edge.
-
-## [0.1.0] — 2026-05-09
-
-First 0.1.0 package. Personal Team signed; no notarized binary shipped.
-Build and install instructions live in the [README](README.md#install).
+Initial public release. Personal Team signed; no notarized binary shipped.
+Build and install instructions live in the [README](README.md#build-menu-bar-app--widget).
 
 ### Added
 
@@ -41,8 +29,10 @@ Build and install instructions live in the [README](README.md#install).
   every 5 minutes while discharging and every 1 minute while charging or on
   external power; samples immediately on launch, on `NSWorkspace.didWakeNotification`,
   on Bolt receiver unsolicited HID++ battery reports (charging-cable
-  plug/unplug), and when the menu opens. Sub-second-fresh "Last sampled"
-  copy refreshed on `menuNeedsUpdate`.
+  plug/unplug), and when the menu opens. The menu includes a `Status:` row for
+  current connected/reconnecting/offline/receiver/error state while keeping
+  the first row pinned to the last successful battery reading; `Last sampled`
+  advances only after a successful battery read.
 - **App Group snapshot.** Each successful sample writes a `BatterySnapshot`
   (`app/Shared/BatterySnapshot.swift`) to UserDefaults suite
   `YOUR_TEAM_ID.industries.stark.boltbattery`. Tracks the last
@@ -61,8 +51,9 @@ Build and install instructions live in the [README](README.md#install).
   centered in the right half such that the gap between ring-right and
   text-left equals the gap between text-right and widget-right. 24pt
   `keyboard` SF Symbol, 31pt rounded semibold monospaced-digit percentage,
-  12pt secondary footer. Two-tier color rule: green when charging or `>20%`,
-  red `≤20%`, gray for degraded states.
+  12pt secondary footer. `100%` scales down slightly to preserve side
+  breathing room. Two-tier color rule: green when charging or `>20%`, red
+  `≤20%`, gray for degraded states.
 - **Charge-history footer.** `Last charged: N% · <elapsed>` with compact
   English (`just now` / `5 min ago` / `2 hr ago` / `1 day ago`), or
   `Charge to start tracking` until the first `charging* → discharging` event
@@ -74,6 +65,11 @@ Build and install instructions live in the [README](README.md#install).
   `Receiver disconnected` (IOKit / set-report failures, ring gray),
   `Keyboard offline` (>6 consecutive timeouts, ring gray), or
   `Error: 0xNN` (HID++ 1.0 / 2.0 protocol error, ring gray).
+- **Connection-event refresh.** HID++ wireless-status / receiver connection
+  reports and Bolt receiver USB-C presence changes can refresh the widget
+  without waiting for the polling interval. Receiver replug uses a short
+  `Reconnecting…` grace window plus background retry before settling on
+  keyboard offline.
 - **Charging indicator.** `BoltShape: Shape` encodes a custom 12-anchor,
   6-segment bezier bolt path (PDF-style Y-up coordinates flipped to SwiftUI
   Y-down). Visible bolt is 12×16pt at `offset(y: -radius)` on the ring's 12
@@ -110,8 +106,8 @@ Build and install instructions live in the [README](README.md#install).
   Widget". The XcodeGen project, `.xcodeproj` file, and Xcode target are still
   named `BoltBattery` so existing pbxproj references stay stable.
 - **Documentation.** README with quickstart, build instructions, and
-  configuration notes covering the Personal Team packaging flow, widget
-  add-to-Notification-Center, login item enablement, and log inspection.
+  configuration notes covering the Personal Team packaging flow, widget setup,
+  login item enablement, and log inspection.
 
 ### Known limitations
 
