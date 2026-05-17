@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let wirelessDeviceStatusFeatureID: UInt16 = 0x1D4B
     private static let receiverReconnectGraceDuration: TimeInterval = 4
     private static let receiverReconnectRetryDuration: TimeInterval = 45
+    private static let chargeEndCorrectionInterval: TimeInterval = 4 * 60 * 60
     private static let keyboardOfflineThreshold = 6
 
     private var statusItem: NSStatusItem!
@@ -461,7 +462,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             && battery.chargingState == "discharging"
         )
         let lastChargeEndedAt = didEndCharging ? now : previous?.lastChargeEndedAt
-        let lastChargeEndedPercent = didEndCharging ? battery.socPercent : previous?.lastChargeEndedPercent
+        let lastChargeEndedPercent: Int?
+        if didEndCharging {
+            lastChargeEndedPercent = battery.socPercent
+        } else if let previousLastChargeEndedAt = previous?.lastChargeEndedAt,
+                  let previousLastChargeEndedPercent = previous?.lastChargeEndedPercent,
+                  battery.chargingState == "discharging",
+                  now.timeIntervalSince(previousLastChargeEndedAt) <= Self.chargeEndCorrectionInterval,
+                  battery.socPercent > previousLastChargeEndedPercent {
+            lastChargeEndedPercent = battery.socPercent
+        } else {
+            lastChargeEndedPercent = previous?.lastChargeEndedPercent
+        }
         let snapshot = BatterySnapshot(
             sampledAt: now,
             socPercent: battery.socPercent,
